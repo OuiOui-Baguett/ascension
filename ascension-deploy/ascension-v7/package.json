@@ -1,0 +1,17 @@
+{
+  "name": "ascension",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n srv,web -c yellow,cyan \"npm -w server run dev\" \"npm -w client run dev\"",
+    "build": "npm -w client run build",
+    "start": "npm -w server run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
