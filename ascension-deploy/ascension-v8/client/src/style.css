@@ -1,0 +1,199 @@
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#0e0c13;color:#f0edf5;
+  font-family:-apple-system,system-ui,sans-serif;user-select:none;-webkit-user-select:none}
+#scene{position:fixed;inset:0;width:100%;height:100%}
+#ui{position:fixed;inset:0;display:flex;flex-direction:column;pointer-events:none;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#ui>*{pointer-events:auto}
+button{font:inherit;color:inherit;border:none;cursor:pointer;border-radius:12px}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.4}
+.mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+/* écrans pleine page */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  align-items:center;gap:16px;padding:24px;text-align:center;background:rgba(10,8,14,.82);
+  backdrop-filter:blur(6px)}
+.screen.soft{background:rgba(10,8,14,.55);backdrop-filter:blur(2px)}
+.screen h1{font-size:44px;letter-spacing:.06em}
+.screen h2{font-size:26px}
+.screen .big{font-size:64px}
+.screen p{color:#c9c2d6;max-width:34ch;line-height:1.5}
+.field{width:min(320px,84vw);padding:14px 16px;font-size:17px;border-radius:12px;border:1px solid #4a4358;
+  background:#1c1824;color:#fff;text-align:center;text-transform:uppercase}
+input.field{user-select:auto;-webkit-user-select:auto}
+.btn{width:min(320px,84vw);padding:16px;font-size:17px;font-weight:700;background:#e6b64c;color:#141119}
+.btn.ghost{background:#2a2436;color:#f0edf5;border:1px solid #4a4358}
+.code{font-size:52px;letter-spacing:.35em;font-weight:800;padding-left:.35em}
+.players{display:flex;flex-direction:column;gap:6px}
+.players div{font-size:18px}
+
+/* barre du haut — fine, la 3D respire */
+.top{margin:6px 10px 0;background:rgba(14,12,19,.72);border:1px solid rgba(53,46,68,.8);border-radius:14px;
+  padding:8px 12px;display:flex;flex-direction:column;gap:4px}
+.top .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.top .floor{font-weight:700;font-size:13px;color:#c9c2d6}
+.top .timer{font-weight:700;font-size:13px;margin-right:8px}
+.top .bank{font-size:26px;font-weight:800}
+.quit{background:rgba(42,36,54,.9);border:1px solid #4a4358;width:26px;height:26px;border-radius:8px;
+  font-size:12px;color:#c9c2d6}
+.tollbar{height:6px;background:#2a2436;border-radius:3px;overflow:hidden}
+.tollbar i{display:block;height:100%;background:#e6b64c;border-radius:3px;transition:width .5s}
+.tolltxt{display:flex;justify-content:space-between;font-size:11px;color:#b9b2c7}
+
+/* toast unique (plus de journal à panneaux) */
+.toast{position:absolute;top:120px;left:50%;transform:translateX(-50%);max-width:88vw;
+  background:rgba(14,12,19,.85);border:1px solid rgba(53,46,68,.8);border-radius:10px;
+  padding:7px 14px;font-size:13px;color:#e6e0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:opacity .6s;z-index:5}
+.toast.fade{opacity:0}
+
+/* indication discrète en bas */
+.hint{margin:auto 10px 14px;text-align:center;background:rgba(14,12,19,.6);border-radius:12px;
+  padding:10px;font-size:14px;color:#d8d2e2}
+
+/* barre d'action contextuelle (machine sélectionnée) */
+.actionbar{margin:auto 10px 10px;background:rgba(20,17,26,.92);border:1px solid #352e44;border-radius:16px;
+  padding:12px;display:flex;flex-direction:column;gap:10px}
+.abhead{display:flex;justify-content:space-between;align-items:center}
+.abhead b{font-size:15px}
+.close{background:#2a2436;border:1px solid #4a4358;width:30px;height:30px;border-radius:9px}
+.chips{display:flex;gap:6px}
+.chips button{flex:1;padding:9px 2px;font-size:12px;font-weight:700;background:#2a2436;border:1px solid #4a4358}
+.chips button.sel{background:#e6b64c;color:#141119;border-color:#e6b64c}
+.chips .mono{font-size:11px}
+.go{padding:16px;font-weight:800;font-size:17px;background:#e6b64c;color:#141119}
+
+/* crash en cours */
+.crashbar{align-items:center}
+.crashbar .mult{font-size:56px;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+.bigcash{width:100%;padding:20px;font-size:22px;font-weight:800;background:#e05c5c;color:#fff}
+
+/* shop */
+.shopscreen{justify-content:flex-start;padding-top:140px}
+.items{display:flex;flex-direction:column;gap:10px;width:min(360px,90vw)}
+.item{display:flex;align-items:center;gap:12px;background:#1c1824;border:1px solid #4a4358;
+  border-radius:14px;padding:12px;text-align:left}
+.item .ic{font-size:34px}
+.item b{font-size:15px;display:block}
+.item small{color:#9b93ab;font-size:12px;line-height:1.3;display:block}
+.item button{margin-left:auto;padding:12px 14px;font-weight:800;background:#e6b64c;color:#141119;white-space:nowrap}
+
+/* joystick tactile */
+.stick{position:fixed;left:18px;bottom:calc(215px + env(safe-area-inset-bottom));transition:bottom .18s;width:118px;height:118px;
+  border-radius:50%;background:rgba(20,17,26,.5);border:1.5px solid rgba(74,67,88,.8);z-index:6;
+  display:none;touch-action:none}
+.stick .knob{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:52px;height:52px;
+  border-radius:50%;background:rgba(230,182,76,.85);box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.abhead .mdesc{color:#9b93ab;font-size:11px;margin-left:10px}
+
+/* ascenseur + cartes */
+.elevbtn{margin-top:6px;padding:10px;font-weight:800;font-size:14px;background:#e6b64c;color:#141119;
+  animation:pulse 1.2s infinite}
+@keyframes pulse{50%{filter:brightness(1.18)}}
+.hilohead{text-align:center;font-size:16px}
+.hilohead b{font-size:22px}
+.hilobtns{display:flex;gap:8px}
+.hb{flex:1;padding:14px 6px;font-weight:800;font-size:15px;background:#2a2436;border:1px solid #4a4358}
+.hb .mono{font-size:12px;color:#e6b64c}
+.hb.opt.red{border-color:#b33636}
+.hb.opt.green{border-color:#1f8a4c}
+
+.reconnect{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#e8a53e;color:#141119;
+  padding:6px 14px;border-radius:10px;font-weight:700;font-size:13px;z-index:9}
+.fall-screen{background:rgba(30,5,5,.9)}
+.victory-screen{background:rgba(20,16,4,.9)}
+.stats{display:flex;flex-direction:column;gap:6px;font-size:16px}
+
+/* bilan par joueur — colonne discrète à droite */
+.side{position:absolute;right:10px;top:178px;display:flex;flex-direction:column;gap:3px;
+  pointer-events:none;z-index:4}
+.srow{display:flex;align-items:center;gap:6px;font-size:11.5px;
+  background:rgba(14,12,19,.55);border-radius:8px;padding:3px 8px 3px 6px;
+  text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.srow i{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.srow .sname{color:#c9c2d6;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow b{margin-left:auto;font-size:12px}
+.srow.me .sname{color:#fff;font-weight:700}
+.srow b.up{color:#7ee08a}
+.srow b.down{color:#e05c5c}
+.srow b.flat{color:#8a8099}
+
+/* ---- v6 : skins, coffre, boutique, mise manuelle ---- */
+.skin{display:flex;flex-direction:column;gap:8px;align-items:center}
+.skinrow{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.sw{width:34px;height:34px;border-radius:50%;border:2px solid transparent}
+.sw.sel{border-color:#fff;box-shadow:0 0 0 2px #e6b64c}
+.ht{width:40px;height:36px;border-radius:10px;background:#2a2436;border:1px solid #4a4358;font-size:18px}
+.ht.sel{background:#e6b64c;border-color:#e6b64c}
+.players .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}
+.tip{font-size:13px;color:#b9b2c7;background:rgba(230,182,76,.08);border:1px solid rgba(230,182,76,.3);
+  border-radius:10px;padding:8px 12px}
+
+.banklab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#8a8099}
+.owned{font-size:14px;margin-left:4px}
+
+/* mise saisie à la main */
+.betpad{display:flex;gap:8px;align-items:stretch}
+.stepb{width:52px;font-size:26px;font-weight:800;background:#2a2436;border:1px solid #4a4358}
+.betin{flex:1;min-width:0;text-align:center;font-size:24px;font-weight:800;border-radius:12px;
+  border:1px solid #4a4358;background:#12101a;color:#ffe9a8;padding:10px 4px;
+  user-select:auto;-webkit-user-select:auto;-moz-appearance:textfield}
+.betin::-webkit-outer-spin-button,.betin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.quick{display:flex;gap:6px}
+.quick button{flex:1;padding:8px 2px;font-size:12px;font-weight:700;background:#2a2436;border:1px solid #4a4358}
+
+.locked{text-align:center;padding:12px;font-size:14px;color:#e0b5b5;
+  background:rgba(224,92,92,.12);border:1px solid rgba(224,92,92,.35);border-radius:12px}
+
+/* coffre */
+.vrow{display:flex;justify-content:space-between;font-size:14px;color:#c9c2d6}
+.vrow b{color:#fff;font-size:16px}
+.hb.wd{border-color:#4aa8dc;color:#bfe8ff}
+.hb.dp{border-color:#5cb46e;color:#c8f0d2}
+
+/* boutique */
+.shoppanel{max-height:66vh}
+.shoplist{display:flex;flex-direction:column;gap:7px;overflow-y:auto}
+.sitem{display:flex;align-items:center;gap:10px;background:#1c1824;border:1px solid #3a3145;
+  border-radius:12px;padding:8px 10px}
+.sitem.has{opacity:.5}
+.sic{font-size:26px}
+.sinfo{flex:1;min-width:0}
+.sinfo b{display:block;font-size:13.5px}
+.sinfo em{font-style:normal;font-size:9.5px;letter-spacing:.06em;color:#8a8099;
+  border:1px solid #4a4358;border-radius:5px;padding:1px 4px;margin-left:4px}
+.sinfo span{display:block;font-size:11.5px;color:#9b93ab;line-height:1.3}
+.sbuy{padding:9px 11px;font-weight:800;font-size:12.5px;background:#e6b64c;color:#141119;white-space:nowrap}
+.shopfoot{text-align:center;font-size:12.5px;color:#b9b2c7}
+
+/* grille des coffres/pierres */
+.grid9{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.cell{padding:13px 0;font-size:16px;font-weight:800;background:#2a2436;border:1px solid #4a4358}
+
+/* ---- v8 : scores dépliables, écran machine, géodes ---- */
+.side{pointer-events:auto;cursor:pointer;max-width:46vw}
+.side.open{background:rgba(14,12,19,.92);border:1px solid #352e44;border-radius:12px;padding:8px}
+.shead{font-size:9.5px;letter-spacing:.1em;color:#8a8099;margin-bottom:5px;text-align:center}
+.sline{display:flex;align-items:center;gap:6px}
+.srow.open{flex-direction:column;align-items:stretch;background:none;padding:4px 2px}
+.srow.open+.srow.open{border-top:1px solid #2a2436;padding-top:6px}
+.sdet{display:flex;flex-wrap:wrap;gap:4px 10px;margin:3px 0 0 13px;font-size:10px;color:#8a8099}
+.crown{font-style:normal;margin-right:3px}
+
+/* fiche d'accueil d'une machine */
+.mcard{display:flex;align-items:center;gap:12px}
+.micon{font-size:38px;line-height:1}
+.minfo b{display:block;font-size:16px}
+.minfo span{display:block;font-size:12px;color:#9b93ab;line-height:1.35;margin-top:2px}
+.mmeta{text-align:center;font-size:11.5px;color:#8a8099}
+.lbl{font-size:11.5px;color:#9b93ab;text-align:center;margin-top:-2px}
+
+/* grille des caisses : lisible et tactile */
+.grid9{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.cell{position:relative;padding:14px 0 10px;background:#2a2436;border:1px solid #4a4358;
+  display:flex;flex-direction:column;align-items:center;gap:1px}
+.cell .cn{font-size:11px;font-weight:800;color:#8a8099}
+.cell .cb{font-size:21px;line-height:1}
+.cell:active{background:#e6b64c}
+.cell:active .cn{color:#141119}
