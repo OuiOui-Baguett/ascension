@@ -1,0 +1,91 @@
+:root {
+  color-scheme: dark;
+  --ink: #0b0a0c;
+  --cream: #f1e3c4;
+  --gold: #d9a441;
+  --red: #b5161f;
+  --manila: #d9c49a;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: #050507; overflow: hidden; color: var(--cream); font-family: 'Special Elite', 'Courier New', monospace; overscroll-behavior: none; }
+canvas#c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+.hidden { opacity: 0 !important; pointer-events: none !important; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+/* ---------- chargement ---------- */
+#loader { position: fixed; inset: 0; background: #050507; display: grid; place-content: center; justify-items: center; gap: 22px; z-index: 50; transition: opacity .9s; }
+.ld-logo { font: 64px 'Bebas Neue', Impact, sans-serif; letter-spacing: .08em; color: var(--cream); }
+.ld-logo span { color: var(--gold); }
+.ld-bar { width: min(62vw, 320px); height: 2px; background: #2a2620; overflow: hidden; }
+.ld-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--gold)); transition: width .25s; }
+.ld-txt { font-size: 13px; letter-spacing: .12em; opacity: .7; }
+
+/* ---------- écran titre ---------- */
+#title { position: fixed; inset: 0; z-index: 10; pointer-events: none; transition: opacity 1.1s; padding: calc(28px + var(--safe-t)) 6vw calc(28px + var(--safe-b)); }
+#title::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(4,4,8,.78) 0%, rgba(4,4,8,.35) 38%, rgba(4,4,8,0) 60%), linear-gradient(0deg, rgba(4,4,8,.6), rgba(4,4,8,0) 40%); }
+#title > * { position: relative; }
+.kicker { font-size: 12px; letter-spacing: .32em; text-transform: uppercase; color: var(--gold); opacity: .9; margin-top: 4vh; }
+.logo { position: relative; margin: 10px 0 0; height: clamp(108px, 22vw, 230px); width: max-content; font: clamp(110px, 22vw, 232px)/.86 'Bebas Neue', Impact, sans-serif; letter-spacing: .02em; }
+.lg { display: block; line-height: .86; position: absolute; left: 0; top: 0; white-space: nowrap; background: linear-gradient(180deg, #fff6dc 0%, #f1dca6 46%, #c48a32 56%, #f6e2b0 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 24px rgba(0,0,0,.6)); }
+.lg-top { clip-path: polygon(0 0, 100% 0, 100% 49%, 0 57%); transform: translateX(-.035em); }
+.lg-bot { clip-path: polygon(0 57.6%, 100% 49.6%, 100% 100%, 0 100%); transform: translate(.03em, .015em); }
+.logo .lg:first-child { position: relative; }
+.cut { position: absolute; left: -4%; right: -6%; top: 53%; height: 2px; background: linear-gradient(90deg, transparent, var(--red) 12%, #ff4a3a 50%, var(--red) 88%, transparent); transform: rotate(-1.9deg); box-shadow: 0 0 14px #ff2a1a; }
+.tag { font: italic clamp(18px, 2.6vw, 28px) 'Playfair Display', Georgia, serif; margin: 18px 0 0; color: #e9dcc0; text-shadow: 0 2px 12px #000; }
+.tag em { color: #ff5a48; font-style: italic; }
+
+#title .dossier { position: absolute; right: 6vw; bottom: calc(6vh + var(--safe-b)); width: min(400px, 88vw); pointer-events: auto; color: #2b2116;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255,255,255,.18), transparent 40%),
+    radial-gradient(circle at 80% 90%, rgba(90,60,20,.22), transparent 50%),
+    repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 2px, transparent 2px 5px),
+    var(--manila);
+  padding: 30px 26px 18px; border-radius: 3px 3px 6px 6px; transform: rotate(-1.2deg);
+  box-shadow: 0 30px 60px rgba(0,0,0,.65), 0 2px 0 #b9a273 inset, 0 -1px 0 rgba(255,255,255,.4) inset; }
+.tab { position: absolute; top: -26px; left: 18px; padding: 6px 16px 4px; font-size: 12px; letter-spacing: .14em; background: var(--manila); border-radius: 6px 6px 0 0; color: #4a3a24; }
+.stamp { position: absolute; right: 14px; top: 16px; padding: 4px 10px; border: 3px solid rgba(181,22,31,.75); color: rgba(181,22,31,.8); font: 22px 'Bebas Neue', Impact, sans-serif; letter-spacing: .14em; transform: rotate(9deg); mix-blend-mode: multiply; }
+.dl { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; border-bottom: 1px dashed rgba(60,40,20,.35); padding: 7px 0; }
+.dl span { opacity: .65; }
+.dossier nav { display: grid; gap: 4px; margin-top: 16px; }
+.dossier nav button { text-align: left; padding: 10px 12px; font-size: 15px; letter-spacing: .04em; color: #2b2116; border-radius: 2px; transition: background .2s, transform .2s; }
+.dossier nav button:hover, .dossier nav button:active { background: rgba(60,40,20,.12); }
+.dossier nav button.primary { background: #1b1410; color: var(--cream); font: 26px 'Bebas Neue', Impact, sans-serif; letter-spacing: .12em; padding: 12px 16px 9px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 6px 0 #0b0806, 0 10px 18px rgba(0,0,0,.35); }
+.dossier nav button.primary s { text-decoration: none; color: var(--gold); }
+.dossier nav button.primary:active { transform: translateY(3px); box-shadow: 0 3px 0 #0b0806; }
+.note { font-size: 11px; opacity: .55; margin-top: 12px; letter-spacing: .06em; }
+
+@media (max-width: 700px), (max-height: 520px) and (orientation: landscape) {
+  #title::before { background: linear-gradient(180deg, rgba(4,4,8,.7), rgba(4,4,8,0) 45%, rgba(4,4,8,.7) 80%); }
+  .kicker { margin-top: 1vh; font-size: 10px; }
+  #title .dossier { left: 50%; right: auto; transform: translateX(-50%) rotate(-1deg); padding: 24px 18px 14px; }
+  .dl { font-size: 12px; padding: 5px 0; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .logo { height: 96px; font-size: 104px; }
+  .tag { font-size: 16px; margin-top: 8px; }
+  #title .dossier { left: auto; right: 3vw; transform: rotate(-1deg) scale(.8); transform-origin: bottom right; bottom: 3vh; width: 330px; }
+  .dossier .dl { display: none; }
+}
+
+/* ---------- cinéma ---------- */
+#bars i { position: fixed; left: 0; right: 0; height: 11vh; background: #000; z-index: 20; transition: transform 1.2s cubic-bezier(.7,0,.2,1); }
+#bars .top { top: 0; transform: translateY(-101%); }
+#bars .bot { bottom: 0; transform: translateY(101%); }
+body.cine #bars i { transform: none; }
+#sub { position: fixed; left: 50%; bottom: calc(13vh + var(--safe-b)); transform: translateX(-50%); width: min(92vw, 760px); text-align: center; z-index: 21; font-size: clamp(14px, 2vw, 19px); letter-spacing: .06em; color: #f4ead2; text-shadow: 0 2px 10px #000; min-height: 1.4em; }
+#skip { position: fixed; right: 18px; bottom: calc(3vh + var(--safe-b)); z-index: 22; font-size: 11px; letter-spacing: .14em; opacity: .55; transition: opacity .6s; }
+
+/* ---------- exploration ---------- */
+#hud { position: fixed; inset: 0; z-index: 15; pointer-events: none; transition: opacity .8s; }
+#back { position: absolute; top: calc(14px + var(--safe-t)); left: 14px; pointer-events: auto; padding: 9px 14px; font-size: 13px; letter-spacing: .1em; background: rgba(10,8,8,.55); border: 1px solid rgba(217,164,65,.45); color: var(--cream); border-radius: 3px; backdrop-filter: blur(6px); }
+#help { position: absolute; left: 50%; top: calc(18px + var(--safe-t)); transform: translateX(-50%); font-size: 12px; letter-spacing: .08em; opacity: .75; text-align: center; transition: opacity 1.5s; text-shadow: 0 1px 6px #000; width: 70vw; }
+#joy { position: absolute; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 1.5px solid rgba(241,227,196,.35); background: radial-gradient(circle, rgba(0,0,0,.25), rgba(0,0,0,.05)); opacity: 0; transition: opacity .2s; }
+#joy.on { opacity: 1; }
+#joy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; border-radius: 50%; background: rgba(241,227,196,.85); transform: translate(-50%,-50%); box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+
+#fade { position: fixed; inset: 0; background: #000; z-index: 40; opacity: 1; pointer-events: none; transition: opacity .6s; }
+#wait { position: fixed; right: 20px; bottom: 20px; z-index: 41; font-size: 20px; letter-spacing: .3em; transition: opacity .3s; }
+@keyframes dip { 0% { opacity: 0; } 35% { opacity: 1; } 100% { opacity: 0; } }
+#fade.dip { animation: dip .55s ease; }

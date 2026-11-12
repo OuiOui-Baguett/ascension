@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#050507" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Le Casse</title>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="loader">
+    <div class="ld-logo"><span>LE</span> CASSE</div>
+    <div class="ld-bar"><i></i></div>
+    <div class="ld-txt">Ouverture du dossier… <b>0 %</b></div>
+  </div>
+
+  <div id="title" class="hidden">
+    <div class="kicker">Un jeu de braquage pour 4 à 8 complices</div>
+    <h1 class="logo" aria-label="Le Casse">
+      <span class="lg lg-top">LE CASSE</span>
+      <span class="lg lg-bot">LE CASSE</span>
+      <i class="cut"></i>
+    </h1>
+    <p class="tag">Un casse. Une nuit. <em>Un traître.</em></p>
+
+    <section class="dossier">
+      <div class="tab">DOSSIER Nº 23-47</div>
+      <div class="stamp">CONFIDENTIEL</div>
+      <div class="dl"><span>Objectif</span><b>Grand Casino — la caisse</b></div>
+      <div class="dl"><span>Équipe</span><b>4 à 8 · dont 1 indic</b></div>
+      <nav>
+        <button id="go" class="primary">Entrer au casino <s>▸</s></button>
+        <button id="q">Qualité : <b>Auto</b></button>
+        <button id="snd">Son : <b>Oui</b></button>
+      </nav>
+      <div class="note">Test de rendu — pas encore de gameplay</div>
+    </section>
+  </div>
+
+  <div id="bars"><i class="top"></i><i class="bot"></i></div>
+  <div id="sub"></div>
+  <div id="skip" class="hidden">Toucher pour passer ▸▸</div>
+
+  <div id="hud" class="hidden">
+    <button id="back">↩ Rue</button>
+    <div id="help">Joystick à gauche pour marcher · glissez à droite pour regarder</div>
+    <div id="joy"><i></i></div>
+  </div>
+
+  <div id="fade"></div>
+  <div id="wait" class="hidden">…</div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

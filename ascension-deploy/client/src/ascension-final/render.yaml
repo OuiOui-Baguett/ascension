@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: ascension
-    runtime: node
-    plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    healthCheckPath: /health
