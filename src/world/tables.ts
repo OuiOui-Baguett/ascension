@@ -123,6 +123,7 @@ export function lightPool(w: number, d: number, x: number, y: number, z: number,
     map: poolT, color: new THREE.Color('#ffd9a6').multiplyScalar(power), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
   }));
   m.position.set(x, y, z); m.rotation.y = rot; m.renderOrder = 2;
+  m.layers.set(1);   // inutile dans le reflet du sol : on économise un appel de rendu
   return m;
 }
 

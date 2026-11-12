@@ -225,6 +225,12 @@ requestAnimationFrame(frame);
   for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; const e = m < .5 ? 2 * m * m : 1 - Math.pow(-2 * m + 2, 2) / 2; if (e < target) lo = m; else hi = m; }
   rail.t = lo * 9; rail.update(0);
 };
+(window as any).__look = async (x: number, y: number, z: number, tx: number, ty: number, tz: number, fov = 55) => {
+  await ensureHall(); if (world !== hall) switchTo(hall!);
+  state = 'cine'; walker.active = false; $('#hud').classList.add('hidden'); document.body.classList.add('cine');
+  const f = Math.hypot(tx - x, ty - y, tz - z);
+  director.play([{ from: [x, y, z], to: [x, y, z], look: [tx, ty, tz], look2: [tx, ty, tz], fov, dur: 9999, focus: f }], true); setDof(getQuality() !== 'low');
+};
 (window as any).__hshot = async (i: number) => {
   await ensureHall(); if (world !== hall) switchTo(hall!);
   state = 'cine'; walker.active = false; $('#hud').classList.add('hidden'); document.body.classList.add('cine');

@@ -108,19 +108,15 @@ export function buildRooms(root: THREE.Object3D, statics: THREE.Object3D, mirror
     k.add(lino, box(x1 - x0, .04, z1 - z0, (x0 + x1) / 2, .02, (z0 + z1) / 2, 1.2));
     wallRun(k, paint, 'z', x0, z0, z1, 0, H, .16, 2, [[-21, 2, 2.6]]);
     wallRun(k, paint, 'z', x1, z0, z1, 0, H, .16, 2, [[-21.5, 1.4, 2.4]]);
-    wallRun(k, paint, 'x', z0, x0, x1, 0, H, .16, 2);
     k.add(paintDark, box(x1 - x0, .2, z1 - z0, (x0 + x1) / 2, H + .1, (z0 + z1) / 2));
     for (const z of [-17, -20.5, -24.5]) k.add(tube, box(.18, .05, 1.3, 11, H - .03, z));
     k.add(MAT.matte('#5a5c60', .6), cyl(.07, .07, z1 - z0, 0, 0, 0, 10).rotateX(Math.PI / 2).translate(x0 + .25, H - .25, (z0 + z1) / 2), cyl(.04, .04, z1 - z0, 0, 0, 0, 8).rotateX(Math.PI / 2).translate(x0 + .45, H - .2, (z0 + z1) / 2));
     k.add(MAT.lacquer('#b0141a', .3), cyl(.08, .08, .5, x1 - .2, .45, -18, 14)); k.add(M.black, cyl(.02, .02, .12, x1 - .2, .76, -18, 8));
-    const exitS = neonPlane(neonTex('SORTIE DE SECOURS', '72px "Bebas Neue"', '#3dff7a', 512, 128, { tube: 3 }), 1.2, .3, '#7dffa8', 1.6);
-    exitS.position.set(11, 2.6, z0 + .1); root.add(exitS);
-    k.add(MAT.matte('#26282c', .5), box(1.1, 2.2, .06, 11, 1.1, z0 + .1));
     // porte « Personnel » côté hall
     const sign = canvasTex(256, 96, (c, w, h) => { c.fillStyle = '#1a1a1a'; c.fillRect(0, 0, w, h); c.fillStyle = '#e8e2d0'; c.font = 'bold 30px "Bebas Neue"'; c.textAlign = 'center'; (c as any).letterSpacing = '4px'; c.fillText('PERSONNEL AUTORISÉ', w / 2, 44); c.font = '20px "Special Elite"'; c.fillStyle = '#c33'; c.fillText('Accès réservé', w / 2, 76); });
     const sp = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .41), new THREE.MeshStandardMaterial({ map: sign, roughness: .5 })); sp.position.set(11, 2.75, -14.86); statics.add(sp);
     k.add(M.brass, box(.08, 2.5, .1, 10.25, 1.25, -14.9), box(.08, 2.5, .1, 11.75, 1.25, -14.9), box(1.58, .08, .1, 11, 2.5, -14.9));
-    walk.push([10.5, -15.8, 11.5, -14.2], [9.95, -26.6, 12.05, -15.3]);
+    walk.push([10.5, -15.8, 11.5, -14.2], [9.95, -27.6, 12.05, -15.3]);
   }
 
   // ================= SALLE DE SURVEILLANCE (x 12.4→20, z −26→−17) =================
@@ -222,7 +218,7 @@ export function buildRooms(root: THREE.Object3D, statics: THREE.Object3D, mirror
     const boxesM = new THREE.MeshStandardMaterial({ map: boxesT, metalness: .55, roughness: .38, color: '#ffffff' });
     const steelWall = new THREE.MeshStandardMaterial({ color: '#6e7277', metalness: .9, roughness: .45 });
     wallRun(k, boxesM, 'x', z0, x0, x1, 0, H, .2, 2.4);
-    wallRun(k, boxesM, 'z', x0, z0, z1, 0, H, .2, 2.4);
+    wallRun(k, boxesM, 'z', x0, z0, z1, 0, H, .2, 2.4, [[-21, 1.4, 2.4]]);
     wallRun(k, boxesM, 'z', x1, z0, z1, 0, H, .2, 2.4, [[-21, 2, 2.6]]);
     wallRun(k, steelWall, 'x', z1, x0, x1, 0, H, .25, 2);
     k.add(steelWall, box(x1 - x0, .2, z1 - z0, 0, H + .1, (z0 + z1) / 2));

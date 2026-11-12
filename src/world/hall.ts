@@ -14,6 +14,7 @@ import { bakeStatic } from '../gfx/bake';
 import { LightPool, zoneAt, type LightDef, type Zone } from '../gfx/lights';
 import { Kit, blackjack, roulette, pendant } from './tables';
 import { buildRooms, wallRun } from './rooms';
+import { buildWest } from './rooms2';
 import type { World } from './world';
 
 const W = 18, D = 15, H = 8.6;          // demi-largeur, demi-profondeur, hauteur des bas-côtés
@@ -34,7 +35,7 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
 
   // ---------- sol : damier marbre crème / granit noir, ciré ----------
   const floorMat = wetMaterial(pbr('marble_01', { roughness: 1, normalScale: .25, color: '#d9ccb6' }), mirror,
-    { damp: .85, blur: 1.1, distort: .01, darken: 0, ripples: 0, f0: .07, checker: texRaw('granite_tile', 'diff') });
+    { damp: .85, blur: 1.7, distort: .008, darken: 0, ripples: 0, f0: .07, checker: texRaw('granite_tile', 'diff') });
   floorMat.roughness = .55;
   const floor = new THREE.Mesh(box(2 * W, .1, 2 * D, 0, -.05, 0, 2.4), floorMat);
   floor.receiveShadow = true; root.add(floor);
@@ -51,15 +52,15 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   const Au: THREE.BufferGeometry[] = [];
   // lambris bas + tenture, percés : salon privé (mur est) et porte du personnel (mur nord)
   const wk = new Kit();
-  const holesN: [number, number, number][] = [[11, 1.5, 2.5]], holesE: [number, number, number][] = [[0, 3.2, 3.4]];
+  const holesN: [number, number, number][] = [[11, 1.5, 2.5]], holesE: [number, number, number][] = [[0, 3.2, 3.4]], holesW: [number, number, number][] = [[0, 2.8, 3.4]];
   wallRun(wk, wood, 'x', -D, -W, W, 0, 1.5, .2, 1.6, holesN); wallRun(wk, wood, 'x', D, -W, W, 0, 1.5, .2, 1.6);
-  wallRun(wk, wood, 'z', -W, -D, D, 0, 1.5, .2, 1.6); wallRun(wk, wood, 'z', W, -D, D, 0, 1.5, .2, 1.6, holesE);
+  wallRun(wk, wood, 'z', -W, -D, D, 0, 1.5, .2, 1.6, holesW); wallRun(wk, wood, 'z', W, -D, D, 0, 1.5, .2, 1.6, holesE);
   wallRun(wk, damask, 'x', -D - .05, -W, W, 1.5, H, .1, 1.1, holesN); wallRun(wk, damask, 'x', D + .05, -W, W, 1.5, H, .1, 1.1);
-  wallRun(wk, damask, 'z', -W - .05, -D, D, 1.5, H, .1, 1.1); wallRun(wk, damask, 'z', W + .05, -D, D, 1.5, H, .1, 1.1, holesE);
+  wallRun(wk, damask, 'z', -W - .05, -D, D, 1.5, H, .1, 1.1, holesW); wallRun(wk, damask, 'z', W + .05, -D, D, 1.5, H, .1, 1.1, holesE);
   wk.flush(statics);
   const gap = (a: number, holes: [number, number, number][]) => holes.some(([c, w]) => Math.abs(a - c) < w / 2 + .3);
   for (const [x0, x1, z, along] of [[-W, W, -D + .11, 'x'], [-W, W, D - .11, 'x'], [-D, D, -W + .11, 'z'], [-D, D, W - .11, 'z']] as const) {
-    const holes = along === 'x' ? (z < 0 ? holesN : []) : (z > 0 ? holesE : []);
+    const holes = along === 'x' ? (z < 0 ? holesN : []) : (z > 0 ? holesE : holesW);
     for (let a = x0; a < x1; a += .5) {
       if (gap(a + .25, holes)) continue;
       Au.push(along === 'x' ? box(.5, .08, .1, a + .25, 1.52, z) : box(.1, .08, .5, z, 1.52, a + .25));
@@ -97,7 +98,7 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     Au.push(cyl(.6, .6, .35, x, .17, z, 24), cyl(.62, .5, .5, x, H - .4, z, 24), box(1.3, .18, 1.3, x, H - .1, z));
     solids.push([x - .6, z - .6, x + .6, z + .6]);
   }
-  statics.add(mesh(C, ceilWood), mesh(Cm, colMarble));
+  statics.add(mesh(C, ceilWood), mesh(Cm, colMarble), mesh(Au, gold));
 
   // appliques murales : tulipes lumineuses entre les pilastres
   {
@@ -108,9 +109,9 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
       glowPts.push(new THREE.Vector3(x + nx * .3, 3.4, z + nz * .3));
     };
     for (let x = -W + 4; x < W; x += 4) { if (Math.abs(x) > 5) { if (Math.abs(x - 11) > 1.2) add(x, -D + .12, 0, 1); add(x, D - .12, 0, -1); } }
-    for (let z = -D + 4; z < D; z += 4) { if (Math.abs(z) > 2.5) add(W - .12, z, -1, 0); if (z > 6 || z < -8) add(-W + .12, z, 1, 0); }
+    for (let z = -D + 4; z < D; z += 4) { if (Math.abs(z) > 2.5) add(W - .12, z, -1, 0); if (Math.abs(z) > 2.5) add(-W + .12, z, 1, 0); }
     statics.add(mesh(sc, shade, false), mesh(arms, gold));
-    root.add(glows(glowPts, '#ffc27a', .75, .5));
+    root.add(glows(glowPts, '#ffc27a', .5, .55));
   }
 
   // ---------- lustres de cristal ----------
@@ -233,7 +234,11 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     const z = z0 + i * 1.0, v = (i + (z0 > 0 ? 1 : 0)) % 3;
     addSlot(9.0, z, -1, v); addSlot(9.72, z, 1, (v + 1) % 3);
   }
-  solids.push([7.9, -10.6, 10.8, -4.4], [7.9, 2, 10.8, 8.2]);
+  for (const z0 of [-10, 2.6]) for (let i = 0; i < 6; i++) {
+    const z = z0 + i * 1.0, v = (i + 2) % 3;
+    addSlot(13.2, z, -1, v); addSlot(13.92, z, 1, (v + 1) % 3);
+  }
+  solids.push([7.9, -10.6, 10.8, -4.4], [7.9, 2, 10.8, 8.2], [12.1, -10.6, 15, -4.4], [12.1, 2, 15, 8.2]);
   for (let i = 0; i < 15; i++) { const z = i < 8 ? -12.2 + i : 3.2 + (i - 8); addSlot(W - .55, z, -1, i % 3); }
   solids.push([W - 2, -12.8, W, -4.6], [W - 2, 2.6, W, 9.8]);
   for (let v = 0; v < 3; v++) { statics.add(mesh(slotGeo.cab[v], cabMats[v])); statics.add(mesh(slotGeo.top[v], topMats[v], false)); }
@@ -246,48 +251,11 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
 
   // ---------- tables de jeu « comme au vrai casino » ----------
   const tk = new Kit();
-  roulette(tk, root, -9.9, -9.4, 0, solids); roulette(tk, root, -9.9, -3.2, 0, solids);
-  pendant(tk, root, -10.5, -9.4, 2.6, .9, 0, 3.0, H, .79); pendant(tk, root, -10.5, -3.2, 2.6, .9, 0, 3.0, H, .79);
-  blackjack(tk, root, -10.2, 3.0, 0, solids); blackjack(tk, root, -10.2, 9.6, 0, solids); blackjack(tk, root, 6.4, -1.1, -Math.PI / 2, solids);
-  pendant(tk, root, -10.2, 3.5, 1.7, .7, 0, 2.9, H, .83); pendant(tk, root, -10.2, 10.1, 1.7, .7, 0, 2.9, H, .83); pendant(tk, root, 6.9, -1.1, 1.7, .7, Math.PI / 2, 2.9, H, .83);
+  roulette(tk, root, -12, -9.6, 0, solids); roulette(tk, root, -12, -3.6, 0, solids);
+  pendant(tk, root, -12.6, -9.6, 2.6, .9, 0, 3.0, H, .79); pendant(tk, root, -12.6, -3.6, 2.6, .9, 0, 3.0, H, .79);
+  blackjack(tk, root, -12, 3.6, 0, solids); blackjack(tk, root, -12, 10.2, 0, solids);
+  pendant(tk, root, -12, 4.1, 1.7, .7, 0, 2.9, H, .83); pendant(tk, root, -12, 10.7, 1.7, .7, 0, 2.9, H, .83);
   tk.flush(statics);
-
-  // ---------- le bar (mur ouest) ----------
-  {
-    const bx = -W + 2.8;
-    statics.add(mesh([box(.8, 1.1, 13, bx, .55, -1, 1.2)], pbr('dark_paneled_wood', { color: '#7a4a34' })));
-    const top = pbr('granite_tile', { color: '#2d2b2a' }); top.roughness = .2;
-    statics.add(mesh([box(1.05, .07, 13.3, bx, 1.13, -1, 1.5)], top));
-    statics.add(mesh([cyl(.03, .03, 13, bx + .62, .25, -1, 8).rotateX(Math.PI / 2).translate(0, 0, 0)].map(g => { g.translate(0, 0, 0); return g; }), MAT.brass()));
-    solids.push([bx - .6, -7.8, bx + .6, 5.8]);
-    // étagères rétroéclairées et bouteilles
-    statics.add(mesh([box(.5, .05, 11, -W + .4, 1.6, -1), box(.5, .05, 11, -W + .4, 2.3, -1), box(.5, .05, 11, -W + .4, 3.0, -1)], MAT.brass()));
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.2), new THREE.MeshBasicMaterial({ map: canvasTex(64, 256, (c, w, h) => { const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#3a1406'); g.addColorStop(.5, '#d07a30'); g.addColorStop(1, '#5a2008'); c.fillStyle = g; c.fillRect(0, 0, w, h); for (let y = 0; y < 3; y++) { c.fillStyle = 'rgba(255,220,160,.9)'; c.fillRect(0, h * (.18 + y * .32), w, 3); } }), color: new THREE.Color(1.1, 1, .9) })); back.rotation.y = Math.PI / 2; back.position.set(-W + .16, 2.35, -1); statics.add(back);
-    // bouteilles (tour de potier procédural, fusionnées par couleur) et tabourets
-    const prof = [[0, 0], [.038, 0], [.04, .02], [.04, .2], [.034, .235], [.014, .26], [.013, .33], [.016, .335], [0, .335]].map(([x, y]) => new THREE.Vector2(x, y));
-    const bGeo = new THREE.LatheGeometry(prof, 10);
-    const bCols = ['#1d4a22', '#6a3410', '#cfd8d0', '#3a0c12'];
-    const bG: THREE.BufferGeometry[][] = bCols.map(() => []);
-    for (let s2 = 0; s2 < 3; s2++) for (let i = 0; i < 26; i++) {
-      const sc = .85 + rnd() * .4;
-      bG[Math.floor(rnd() * bCols.length)].push(bGeo.clone().scale(sc, sc * (.9 + rnd() * .3), sc).translate(-W + .38 + rnd() * .1, 1.63 + s2 * .7, -6.2 + i * .45 + rnd() * .1));
-    }
-    bCols.forEach((c, i) => statics.add(mesh(bG[i], new THREE.MeshStandardMaterial({ color: c, roughness: .08, metalness: .35 }), false)));
-    const stC: THREE.BufferGeometry[] = [], stS: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 7; i++) {
-      const z = -6.6 + i * 1.8, x = bx + 1.0;
-      stC.push(cyl(.03, .03, .78, x, .39, z, 10), cyl(.22, .24, .03, x, .015, z, 18), new THREE.TorusGeometry(.17, .012, 6, 18).rotateX(Math.PI / 2).translate(x, .32, z));
-      stS.push(cyl(.23, .21, .12, x, .82, z, 20));
-    }
-    statics.add(mesh(stC, MAT.chrome()), mesh(stS, MAT.lacquer('#5a0c12', .5)));
-    for (const z of [-5, 3]) {
-      const c = model('Chandelier_01'); remapMaterials(c, m => m.name.includes('lamps') ? glowMat('#ffe2b8', 2.2) : null);
-      c.scale.setScalar(1.6); c.position.set(bx - .2, H - 1.8, z); root.add(c); dyn.push(c);
-      statics.add(mesh([cyl(.015, .015, 1.0, bx - .2, H - .5, z, 6)], gold));
-    }
-    const barSign = neonPlane(neonTex('Le Bar', 'italic 170px "Playfair Display"', '#ffb54a', 1024, 256, { tube: 5 }), 4, 1, '#ffd08a', 2.6);
-    barSign.position.set(-W + .14, 5.2, -1); barSign.rotation.y = Math.PI / 2; root.add(barSign);
-  }
 
   // ---------- salon près de l'entrée ----------
   {
@@ -298,7 +266,7 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     }
     const ot = model('Ottoman_01'); ot.position.set(13, 0, 11.4); statics.add(ot);
     solids.push([9.8, 10.4, 16.4, 14.6]);
-    for (const [x, z] of [[-16.8, 13.6], [16.8, -13.6], [-16.8, -13.6], [6, 13.8], [-6, 13.8]] as const) {
+    for (const [x, z] of [[-16.8, 13.6], [16.8, -13.6], [-16.8, -13.6], [5.3, 13.9], [-5.3, 13.9]] as const) {
       const p = model('potted_plant_04'); p.scale.setScalar(4); p.position.set(x, 0, z); statics.add(p);
     }
     for (const x of [-8.5, 8.5]) {
@@ -337,36 +305,127 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   }
 
   // ---------- animations ----------
+  // ---------- cloisons : la nef devient une galerie, les ailes deviennent des salles ----------
+  {
+    const pk = new Kit();
+    const doors: [number, number, number][] = [[-5, 2.8, 3.6], [7, 2.8, 3.6]];
+    for (const x of [-6.2, 6.2]) {
+      wallRun(pk, wood, 'z', x, -12.3, D, 0, 1.5, .34, 1.6, doors);
+      wallRun(pk, damask, 'z', x, -12.3, D, 1.5, H, .28, 1.1, doors);
+      for (const fx of [x - .17, x + .17]) {
+        for (let a = -12.3; a < D; a += .5) if (!doors.some(([c, w]) => Math.abs(a + .25 - c) < w / 2 + .2)) pk.add(gold, box(.04, .08, .5, fx, 1.52, a + .25));
+        pk.add(gold, box(.05, .14, D + 12.3, fx, H - .9, (D - 12.3) / 2));
+        for (const [c, w, h] of doors) pk.add(gold, box(.06, h + .2, .16, fx, (h + .2) / 2, c - w / 2 - .08), box(.06, h + .2, .16, fx, (h + .2) / 2, c + w / 2 + .08), box(.06, .2, w + .32, fx, h + .1, c));
+      }
+      let cur = -12.3;
+      for (const [c, w] of doors) { solids.push([x - .25, cur, x + .25, c - w / 2]); cur = c + w / 2; }
+      solids.push([x - .25, cur, x + .25, D]);
+    }
+    const pT = plaqueTex('JEUX DE TABLE', 'Roulette · Blackjack'), mT = plaqueTex('MACHINES À SOUS', 'Jackpots progressifs');
+    for (const [x, t] of [[-6.04, pT], [6.04, mT]] as const) for (const z of [-5, 7]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(2.6, .65), new THREE.MeshStandardMaterial({ map: t, emissive: '#fff', emissiveMap: t, emissiveIntensity: .5, roughness: .35, metalness: .3 }));
+      p.position.set(x, 4.25, z); p.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2; statics.add(p);
+    }
+    // tapis rouge, bustes et palmiers entre les colonnes
+    pk.add(pbr('velour_velvet', { color: '#a80e1a' }), box(3, .02, 26, 0, .012, 2, 1));
+    pk.add(gold, box(.05, .03, 26, -1.52, .02, 2), box(.05, .03, 26, 1.52, .02, 2));
+    for (const z of [-7.5, 4.5, 10.5]) for (const x of [-4.6, 4.6]) {
+      pk.add(colMarble, box(.6, 1.1, .6, x, .55, z, 1));
+      const b = model('marble_bust_01'); b.scale.setScalar(1.25); b.position.set(x, 1.1, z); b.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2; statics.add(b);
+      solids.push([x - .4, z - .4, x + .4, z + .4]);
+    }
+    pk.flush(statics);
+  }
+  // ---------- la Grande Roue de la fortune, au milieu de la galerie ----------
+  {
+    const g = new THREE.Group(); g.position.set(0, 0, 0); root.add(g);
+    const wk2 = new Kit();
+    wk2.add(MAT.lacquer('#2a140a', .35), cyl(1.9, 2.0, .3, 0, .15, 0, 8));
+    wk2.add(pbr('velour_velvet', { color: '#a80e1a' }), cyl(1.82, 1.82, .02, 0, .31, 0, 8));
+    wk2.add(gold, new THREE.TorusGeometry(1.95, .04, 6, 8).rotateX(Math.PI / 2).rotateY(Math.PI / 8).translate(0, .3, 0));
+    for (const sx of [-1, 1]) wk2.add(MAT.lacquer('#1a0c06', .35), box(.16, 3.6, .16, 0, 0, 0).rotateZ(sx * .2).translate(sx * .5, 1.95, -.3));
+    wk2.add(gold, new THREE.TorusGeometry(1.86, .07, 10, 64).translate(0, 2.55, .02), cyl(.1, .1, .5, 0, 0, 0, 16).rotateX(Math.PI / 2).translate(0, 2.55, -.1));
+    wk2.add(MAT.lacquer('#b0141a', .3), new THREE.ConeGeometry(.12, .3, 4).rotateZ(Math.PI).translate(0, 4.5, .12));
+    wk2.flush(g);
+    const VALS = ['1', '2', '5', '1', '10', '2', '1', '20', '1', '5', '2', 'JOKER', '1', '2', '5', '1', '10', '2', '1', '40', '1', '5', '2', 'CASINO'];
+    const wt = canvasTex(1024, 1024, (c, w) => {
+      const R = w / 2; c.translate(R, R);
+      const n = VALS.length, a = Math.PI * 2 / n;
+      VALS.forEach((v, i) => {
+        c.fillStyle = v === 'JOKER' ? '#1a1a1a' : v === 'CASINO' ? '#0f6a3a' : ['#b3121e', '#f2e6c8', '#1a3fbf', '#d9a441'][i % 4];
+        c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, i * a - Math.PI / 2, (i + 1) * a - Math.PI / 2); c.closePath(); c.fill();
+        c.save(); c.rotate((i + .5) * a); c.fillStyle = (i % 4 === 1 && v.length < 3) ? '#2a1a0a' : '#fff6e0'; c.textAlign = 'center';
+        c.font = v.length > 2 ? 'bold 40px "Bebas Neue"' : 'bold 84px "Bebas Neue"'; c.fillText(v.length > 2 ? v : '×' + v, 0, -R * .72); c.restore();
+      });
+      c.strokeStyle = '#d4a64a'; c.lineWidth = 5;
+      for (let i = 0; i < n; i++) { c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(i * a - Math.PI / 2) * R, Math.sin(i * a - Math.PI / 2) * R); c.stroke(); }
+      c.fillStyle = '#2a140a'; c.beginPath(); c.arc(0, 0, R * .26, 0, 7); c.fill();
+      c.fillStyle = '#d4a64a'; c.font = 'italic 48px "Playfair Display"'; c.textAlign = 'center'; c.fillText('Fortune', 0, 16);
+    });
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.8, 72), new THREE.MeshStandardMaterial({ map: wt, roughness: .35, metalness: .15 }));
+    disc.position.set(0, 2.55, 0); g.add(disc);
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * 1.98, 2.55 + Math.sin(a) * 1.98, .04)); }
+    g.add(bulbs(pts, '#ffd9a0', { size: .05, speed: 9, period: 4, power: 7 }));
+    const ws = neonPlane(neonTex('LA GRANDE ROUE', '120px Monoton', '#ffcf5a', 2048, 220, { tube: 6 }), 4.2, .45, '#ffe2a0', 2.6);
+    ws.position.set(0, 4.95, 0); g.add(ws);
+    let spin = .25;
+    onTick((t, dt) => { if (Math.sin(t * .11) > .985) spin = 3.5; spin += (.25 - spin) * dt * .35; disc.rotation.z -= spin * dt; });
+    solids.push([-2.1, -2.1, 2.1, 2.1]);
+  }
+  // ---------- tableau du jackpot progressif au-dessus des machines ----------
+  {
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 224;
+    const jt = new THREE.CanvasTexture(cv); jt.colorSpace = THREE.SRGBColorSpace;
+    let amount = 1284397.52;
+    const draw = () => {
+      const c = cv.getContext('2d')!;
+      c.fillStyle = '#07020a'; c.fillRect(0, 0, 1024, 224);
+      c.textAlign = 'center'; c.fillStyle = '#ff4fb0'; c.shadowColor = '#ff4fb0'; c.shadowBlur = 18; c.font = '64px Monoton'; c.fillText('MÉGA JACKPOT', 512, 80);
+      c.fillStyle = '#ffd25a'; c.shadowColor = '#ffb020'; c.font = 'bold 96px "Courier New", monospace';
+      c.fillText(amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €', 512, 186);
+      jt.needsUpdate = true;
+    };
+    draw();
+    let next = 0;
+    onTick((t) => { if (t > next) { next = t + .35; amount += Math.random() * 3.7; draw(); } });
+    const jm = new THREE.MeshBasicMaterial({ map: jt, color: new THREE.Color(1.8, 1.8, 1.8) });
+    const jk = new Kit();
+    jk.add(MAT.blackMetal(), box(5.2, 1.25, .22, 11.4, 4.45, -1), cyl(.015, .015, 3.6, 9.4, 6.8, -1, 6), cyl(.015, .015, 3.6, 13.4, 6.8, -1, 6));
+    jk.flush(statics);
+    for (const [z, r] of [[-.88, 0], [-1.12, Math.PI]] as const) { const p = new THREE.Mesh(new THREE.PlaneGeometry(5, 1.1), jm); p.position.set(11.4, 4.45, z); p.rotation.y = r; root.add(p); }
+  }
+
   // ---------- autres pièces ----------
   const rooms = buildRooms(root, statics, mirror, solids);
+  const west = buildWest(root, statics, mirror, solids);
 
   // ---------- lumières par zone (nombre fixe de lampes) ----------
   const pool = new LightPool(root, 6, 2);
-  const hallLights: LightDef[] = [
-    ...[-9, -3, 3, 9].map(z => ({ kind: 'point' as const, pos: [0, H - 2.2, z] as [number, number, number], color: '#ffbf73', intensity: 30, distance: 15, decay: 1.4, flicker: .02 })),
-    { kind: 'point', pos: [-W + 2.8, 4.5, -1], color: '#ffb468', intensity: 24, distance: 11 },
-    { kind: 'point', pos: [12.5, 3, -1], color: '#ff5fae', intensity: 16, distance: 10, decay: 1.4 },
-    { kind: 'spot', pos: [0, 5.6, -D + 4], target: [0, 2.05, -D + .35], color: '#ffe1b0', intensity: 60, distance: 10, angle: .5, penumbra: .6 },
-    { kind: 'spot', pos: [-10, 7.6, -1], target: [-10, 0, -1], color: '#ffd8a8', intensity: 70, distance: 14, angle: .85, penumbra: .7 },
-  ];
+  const ch = (z: number): LightDef => ({ kind: 'point', pos: [0, H - 2.2, z], color: '#ffbf73', intensity: 30, distance: 15, decay: 1.4, flicker: .02 });
+  const warm = (x: number, y: number, z: number, i: number, d = 13, c = '#ffc58a'): LightDef => ({ kind: 'point', pos: [x, y, z], color: c, intensity: i, distance: d });
+  const down = (x: number, z: number, i: number, a = .8): LightDef => ({ kind: 'spot', pos: [x, 7.6, z], target: [x, 0, z], color: '#ffd8a8', intensity: i, distance: 14, angle: a, penumbra: .7 });
+  const vaultSpot: LightDef = { kind: 'spot', pos: [0, 5.6, -D + 4], target: [0, 2.05, -D + .35], color: '#ffe1b0', intensity: 60, distance: 10, angle: .5, penumbra: .6 };
   const zones: Zone[] = [
     { name: 'vip', rects: [[18.4, -7, 30, 7]], lights: rooms.zones.vip },
-    { name: 'back', rects: [[-5, -27, 20, -15.15]], lights: rooms.zones.back },
-    { name: 'hall', rects: [[-W, -D - .2, W + .4, D]], lights: hallLights },
+    { name: 'bar', rects: [[-30.2, -8, -18.1, 14]], lights: west.zones.bar },
+    { name: 'backW', rects: [[-24, -29.6, -5, -15.15], [-24, -15.15, -21, -8]], lights: west.zones.backW },
+    { name: 'backE', rects: [[-5, -29.6, 20, -15.15]], lights: rooms.zones.back },
+    { name: 'tables', rects: [[-18.2, -15.15, -6.2, 15]], lights: [warm(-12, 5.5, -7, 22), warm(-12, 5.5, 6, 22), ch(-3), ch(3), warm(-24, 3.6, 0, 10, 10, '#ffb468'), warm(-12, 3, 13.5, 8, 8), down(-12, -6.4, 60), down(-12, 6.4, 60)] },
+    { name: 'slots', rects: [[6.2, -15.15, 18.4, 15]], lights: [warm(11.3, 3, -7, 16, 10, '#ff5fae'), warm(11.3, 3, 5.5, 12, 10, '#5fd0ff'), warm(13, 4, 12.5, 14, 10), ch(-3), ch(3), warm(23.6, 3.4, 0, 8, 9, '#ffd9a6'), down(11.3, -1, 50, .9), { kind: 'spot', pos: [11, 4, -12.5], target: [11, 1, -15], color: '#ffd8a8', intensity: 10, distance: 6, angle: .6, penumbra: .7 }] },
+    { name: 'gallery', rects: [[-6.2, -15.15, 6.2, 15.3]], lights: [ch(-9), ch(-3), ch(3), ch(9), warm(-12, 5.5, 0, 14), warm(11.3, 3.2, -1, 10, 10, '#ff5fae'), vaultSpot, { kind: 'spot', pos: [0, 7.8, 5], target: [0, 2.4, 0], color: '#fff0d8', intensity: 70, distance: 14, angle: .36, penumbra: .5 }] },
   ];
-
-  bakeStatic(statics, dyn);
-
+  const zoneByName = (n: string) => zones.find(z => z.name === n)!;
   // reflets diffus : une sonde d'environnement capturée dans chaque zone
   const pm = new THREE.PMREMGenerator(renderer);
   for (const u of mirror.users) u.uOn.value = 0;
-  const probes: Record<string, [number, number, number]> = { hall: [0, 2.4, 0], vip: [24, 1.8, 0], back: [3, 1.6, -21] };
+  const probes: Record<string, [number, number, number]> = { gallery: [0, 2.4, 6], tables: [-12, 1.8, 0.3], slots: [11.3, 1.8, -1], vip: [24, 1.8, 0], bar: [-23, 1.6, -2], backE: [3, 1.6, -21], backW: [-10, 1.5, -21] };
   for (const zn of zones) {
     pool.apply(zn.lights);
     const c = probes[zn.name];
     root.position.set(-c[0], -c[1], -c[2]); scene.updateMatrixWorld(true);
     zn.env = pm.fromScene(scene, .03, .1, 60).texture;
-    zn.envIntensity = zn.name === 'hall' ? 1.2 : 1;
+    zn.envIntensity = ['gallery', 'tables', 'slots'].includes(zn.name) ? 1.2 : 1;
   }
   root.position.set(0, 0, 0); scene.updateMatrixWorld(true);
   for (const u of mirror.users) u.uOn.value = 1;
@@ -375,16 +434,16 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     current = zn; pool.apply(zn.lights);
     scene.environment = zn.env!; scene.environmentIntensity = zn.envIntensity ?? 1;
   };
-  setZone(zones[2]);
+  setZone(zoneByName('gallery'));
   onTick((t) => {
-    const p = camera.position, zn = zoneAt(zones, p.x, p.z) ?? zones[2];
+    const p = camera.position, zn = zoneAt(zones, p.x, p.z) ?? zoneByName('gallery');
     if (zn !== current) setZone(zn);
     pool.tick(t);
   });
   // flux vidéo de la salle de surveillance : seulement quand on peut les voir
-  const feedZone = [zones[2], zones[2], zones[2], zones[0]];
+  const feedZone = [zoneByName('slots'), zoneByName('tables'), zoneByName('gallery'), zoneByName('vip')];
   const feedsHook = (r: THREE.WebGLRenderer) => {
-    if (current?.name !== 'back' || camera.position.x < 9) return;
+    if (current?.name !== 'backE' || camera.position.x < 9) return;
     rooms.feedsHook(r, (i) => {
       const zn = feedZone[i]; pool.apply(zn.lights); scene.environment = zn.env!;
       for (const u of mirror.users) u.uOn.value = 0;
@@ -396,8 +455,9 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     look: { tone: 'agx', exposure: 1.0, bloom: { intensity: 1.05, threshold: .85, smoothing: .25, radius: .75 },
       ao: { radius: 1.4, intensity: 2.2, falloff: 1, color: '#0a0503' }, saturation: .14, contrast: .08, vignette: .45, grain: .04 },
     shots: [
-      { from: [0, 5.6, 13.8], to: [0, 2.5, 3], look: [0, 3.0, -14], look2: [0, 2.1, -14], fov: 48, dur: 8, focus: 16, text: '23 h 47 — Grand Casino. Trois heures avant la fermeture.' },
-      { from: [-6.3, 1.2, 7.2], to: [-6.7, 1.3, -.6], look: [-10.4, .95, 3.4], look2: [-10.2, .9, -6.8], fov: 40, dur: 7, focus: 4.5, text: 'Ce soir, des millions changent de mains sous les lustres.' },
+      { from: [0, 6.4, 14.2], to: [0, 3.0, 7], look: [0, 2.6, 0], look2: [0, 2.3, -4], fov: 50, dur: 8, focus: 8, text: '23 h 47 — Grand Casino. Trois heures avant la fermeture.' },
+      { from: [-8.1, 1.2, 8.4], to: [-8.3, 1.3, -1.2], look: [-12, .95, 3.6], look2: [-12, .9, -6.8], fov: 40, dur: 6, focus: 4.5, text: 'Ce soir, des millions changent de mains sous les lustres.' },
+      { from: [-19.6, 1.6, -3.2], to: [-21.4, 1.5, -1.6], look: [-27.3, 1.4, -1], look2: [-26.5, 1.3, 2.5], fov: 44, dur: 6, focus: 5, text: 'Au bar, on parle trop. Et les murs écoutent.' },
       { from: [19.3, 1.55, 2.8], to: [21.2, 1.35, 1.5], look: [23.6, .9, 0], look2: [24.2, .85, -.2], fov: 42, dur: 6, focus: 3.5, text: 'Au salon privé, les gros joueurs misent sans compter.' },
       { from: [14.6, 1.55, -19.6], to: [16.8, 1.45, -21.2], look: [20, 1.9, -21.5], look2: [20, 1.9, -21.5], fov: 44, dur: 6, focus: 3.4, text: 'Douze caméras. Six vigiles. Aucun angle mort… en théorie.' },
       { from: [8.2, 1.5, -21], to: [3.4, 1.45, -21.2], look: [0, 1.0, -21.4], look2: [-1.4, .9, -21.6], fov: 46, dur: 6, focus: 3.4, text: 'Et au bout du couloir : la chambre forte.' },
@@ -406,7 +466,7 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     focus: 14,
     tick: () => {},
     spawn: { pos: [0, 1.65, 12.4], yaw: 0 },
-    solids: solids as [number, number, number, number][], walk: [[-W + .6, -D + .6, W - .6, D - .6], ...rooms.walk],
+    solids: solids as [number, number, number, number][], walk: [[-W + .6, -D + .6, W - .6, D - .6], ...rooms.walk, ...west.walk],
   };
 }
 
