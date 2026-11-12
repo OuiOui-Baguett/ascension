@@ -11,11 +11,14 @@ import { ROULETTE_CTL } from './world/tables';
 import { SEATS, SLOT_SEAT } from './world/people';
 import { setJackpotBoard } from './world/hall';
 import { fitFov } from './cam';
+import { voice, preloadVoices } from './audio';
 import type { Walker } from './cam';
 import type { Net } from './net';
 import type { Body, Remotes } from './player';
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
+/** La caissière, derrière le guichet central */
+const CASHIER = { x: 0, z: -13.2 };
 const eur = (n: number) => n.toLocaleString('fr-FR') + ' €';
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
@@ -35,6 +38,7 @@ export class Play {
   private giveTo: string | null = null;
   private table = -1; private ts: TableState | null = null; private chip = 50; private tsAt = 0;
   private slot = -1; private bet = 10; private reel: Reels | null = null;
+  private attract: Reels | null = null; private attractSlot = -1; private lastCall = false;
   private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3();
   private holdMoney: number | null = null;
 
@@ -42,6 +46,7 @@ export class Play {
 
   // ---------- cycle de la nuit ----------
   start(elapsed: number, dur: number) {
+    preloadVoices(['caisse_bonsoir', 'caisse_merci', 'caisse_epuise', 'caisse_argent', 'croupier_faites', 'croupier_derniers', 'croupier_rien', 'annonce_jackpot']);
     this.on = true; this.clock0 = performance.now() - elapsed; this.dur = dur;
     $('#play').classList.remove('hidden');
     setJackpotBoard(this.jackpot);
@@ -51,15 +56,18 @@ export class Play {
     this.close(false);
     this.on = false; $('#play').classList.add('hidden');
     this.reel?.dispose(); this.reel = null;
+    this.attract?.dispose(); this.attract = null; this.attractSlot = -1;
   }
 
   onMsg(m: ServerMsg) {
     switch (m.t) {
-      case 'me': this.money = m.money; this.inv = m.inv; this.renderMoney(); if (this.mode === 'shop') this.renderShop(); if (this.mode === 'bag') this.renderBag(); break;
+      case 'me':
+        if (this.mode === 'shop' && Object.values(m.inv).reduce((a, b) => a + b, 0) > Object.values(this.inv).reduce((a, b) => a + b, 0)) this.say('caisse_merci', CASHIER);
+        this.money = m.money; this.inv = m.inv; this.renderMoney(); if (this.mode === 'shop') this.renderShop(); if (this.mode === 'bag') this.renderBag(); break;
       case 'shop': this.prices = m.prices; this.stock = m.stock; if (this.mode === 'shop') this.renderShop(); break;
       case 'jack':
         this.jackpot = m.v; setJackpotBoard(m.v); $('#s-jack').textContent = eur(m.v);
-        if (m.who) this.c.toast(`Jackpot pour ${esc(m.who)} !`, '+ ' + eur(m.amount ?? 0));
+        if (m.who) { this.c.toast(`Jackpot pour ${esc(m.who)} !`, '+ ' + eur(m.amount ?? 0)); voice('annonce_jackpot', { gain: .9 }); }
         break;
       case 'fx': {
         const b = m.id === this.c.net.id ? this.c.body() : this.c.remotes()?.map.get(m.id)?.body;
@@ -72,9 +80,16 @@ export class Play {
         else { this.holdMoney = null; this.money = m.money; this.renderMoney(); }
         break;
       case 'rtab': if (m.s.id === this.table) this.onTable(m.s); break;
+      case 'error':
+        if (this.mode === 'shop') this.say(/stock/.test(m.msg) ? 'caisse_epuise' : /argent/.test(m.msg) ? 'caisse_argent' : '', CASHIER);
+        return false;
       default: return false;
     }
     return true;
+  }
+  /** Une réplique d'un personnage, plus faible quand on est loin de lui. */
+  private say(name: string, from: { x: number; z: number }) {
+    if (name) voice(name, { pos: from, listener: { x: this.c.walker.pos.x, z: this.c.walker.pos.z } });
   }
 
   /** Chaque image : horloge, bouton d'action, caméra des jeux. Renvoie vrai si la caméra est pilotée ici. */
@@ -96,15 +111,30 @@ export class Play {
     if (dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.4 ** 2) near = { kind: 'caisse', i: 0 };
     ROULETTES.forEach((t, i) => { if (!near && Math.abs(p.x - t.x) < 3.7 && Math.abs(p.z - t.z) < 2.7) near = { kind: 'roul', i }; });
     if (!near) {
-      let best = 1.4 ** 2;
-      const busy = this.c.remotes()?.busySlots;
+      // la machine visée : proche ET dans la direction où l'on regarde (plus de mauvaise machine)
+      let best = Infinity;
+      const busy = this.c.remotes()?.busySlots, w = this.c.walker;
+      const fx = -Math.sin(w.yaw), fz = -Math.cos(w.yaw);
       SLOT_LIST.forEach((s, i) => {
         if (SEATS[SLOT_SEAT[i]]?.taken || busy?.has(i)) return;
-        const q = slotSeat(s), d = dist2(p.x, p.z, q.x, q.z);
-        if (d < best) { best = d; near = { kind: 'slot', i }; }
+        const q = slotSeat(s), d = Math.sqrt(dist2(p.x, p.z, q.x, q.z));
+        if (d > 1.8) return;
+        const dx = s.x - p.x, dz = s.z - p.z, l = Math.hypot(dx, dz) || 1;
+        const facing = (dx * fx + dz * fz) / l;          // 1 = pile devant
+        if (facing < .1) return;
+        const score = d + (1 - facing) * 1.6;
+        if (score < best) { best = score; near = { kind: 'slot', i }; }
       });
     }
     this.near = near;
+    // la machine visée s'allume (écran « JOUER ») pour qu'on sache laquelle on prend
+    const target = near?.kind === 'slot' ? near.i : -1;
+    if (target !== this.attractSlot) {
+      this.attract?.dispose(); this.attract = null; this.attractSlot = target;
+      const sc = this.c.scene();
+      if (target >= 0 && sc) this.attract = new Reels(SLOT_LIST[target], sc, true);
+    }
+    this.attract?.update(1 / 60);
     const act = $('#p-act');
     act.classList.toggle('hidden', !near);
     if (near) act.innerHTML = near.kind === 'caisse' ? 'Caisse<small>acheter</small>' : near.kind === 'roul' ? 'Roulette<small>jouer</small>' : 'Machine<small>s\'asseoir</small>';
@@ -122,7 +152,7 @@ export class Play {
 
   private act() {
     const n = this.near; if (!n) return;
-    if (n.kind === 'caisse') this.open('shop');
+    if (n.kind === 'caisse') { this.open('shop'); this.say('caisse_bonsoir', CASHIER); }
     else if (n.kind === 'roul') {
       this.table = n.i; this.ts = null; this.open('roul');
       this.c.net.send({ t: 'rjoin', table: n.i });
@@ -145,6 +175,7 @@ export class Play {
 
   private open(mode: Mode) {
     this.close(false);
+    this.attract?.dispose(); this.attract = null; this.attractSlot = -1;
     this.mode = mode;
     this.c.walker.active = false;
     $('#p-act').classList.add('hidden'); $('#p-give').classList.add('hidden');
@@ -202,8 +233,11 @@ export class Play {
   private onTable(s: TableState) {
     const prev = this.ts;
     this.ts = s; this.tsAt = performance.now();
-    const ctl = ROULETTE_CTL[s.id];
-    if (s.ph === 'spin' && (!prev || prev.ph !== 'spin') && ctl) ctl.play(s.res, Math.max(1.5, s.left / 1000 - .3));
+    const ctl = ROULETTE_CTL[s.id], t = ROULETTES[s.id], dealer = { x: t.x + 1, z: t.z - 1.25 };
+    if (s.ph === 'spin' && (!prev || prev.ph !== 'spin') && ctl) { ctl.play(s.res, Math.max(1.5, s.left / 1000 - .3)); this.say('croupier_rien', dealer); }
+    if (s.ph === 'bets' && prev?.ph !== 'bets') { this.say('croupier_faites', dealer); this.lastCall = false; preloadVoices([]); }
+    if (s.ph === 'spin') preloadVoices([`numero_${String(s.res).padStart(2, '0')}`]);
+    if (s.ph === 'result' && prev?.ph !== 'result') this.say(`numero_${String(s.res).padStart(2, '0')}`, dealer);
     if (s.ph === 'result' && prev?.ph !== 'result') {
       const w = s.wins.find(x => x[0] === this.c.net.id);
       const mineBet = (prev?.bets ?? []).filter(b => b[0] === this.c.net.id).reduce((a, b) => a + b[3], 0);
@@ -216,6 +250,7 @@ export class Play {
     const s = this.ts; if (!s) return;
     const left = Math.max(0, Math.ceil((s.left - (performance.now() - this.tsAt)) / 1000));
     const el = $('#r-time');
+    if (s.ph === 'bets' && left <= 4 && left > 0 && !this.lastCall) { this.lastCall = true; const tb = ROULETTES[s.id]; this.say('croupier_derniers', { x: tb.x + 1, z: tb.z - 1.25 }); }
     const t = s.ph === 'bets' ? `${left} s` : '';
     if (el.textContent !== t) el.textContent = t;
   }
@@ -243,8 +278,9 @@ export class Play {
     const t = ROULETTES[this.table]; if (!t) return;
     const side = Math.sign(this.c.walker.pos.z - t.z) || 1;
     const close = this.ts?.ph === 'spin' || this.ts?.ph === 'result';
-    const pos = close ? new THREE.Vector3(t.x + 1.0, 1.55, t.z + side * 1.05) : new THREE.Vector3(t.x + .1, 2.45, t.z + side * 2.75);
-    const look = close ? new THREE.Vector3(t.x + 1.62, .88, t.z) : new THREE.Vector3(t.x + .5, .75, t.z);
+    // pendant le tirage : vue plongeante sur le cylindre, on voit les cases défiler et la bille tomber
+    const pos = close ? new THREE.Vector3(t.x + 1.38, 1.78, t.z + side * .62) : new THREE.Vector3(t.x + .1, 2.45, t.z + side * 2.75);
+    const look = close ? new THREE.Vector3(t.x + 1.62, .9, t.z) : new THREE.Vector3(t.x + .5, .75, t.z);
     this.moveCam(pos, look, dt, close ? 52 : 58);
   }
 
@@ -348,7 +384,8 @@ class Reels {
   private pos = [Math.random() * SYM_N, Math.random() * SYM_N, Math.random() * SYM_N];
   private vel = [0, 0, 0]; private target: number[] | null = null; private stopAt = [0, 0, 0]; private t = 0;
   private done: (() => void) | null = null;
-  constructor(s: { x: number; z: number; face: number }, scene: THREE.Scene) {
+  private t0 = 0;
+  constructor(s: { x: number; z: number; face: number }, scene: THREE.Scene, private attractMode = false) {
     this.cv.width = 512; this.cv.height = 372;
     this.tex = new THREE.CanvasTexture(this.cv); this.tex.colorSpace = THREE.SRGBColorSpace;
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(.58, .42), new THREE.MeshBasicMaterial({ map: this.tex, toneMapped: false }));
@@ -365,6 +402,17 @@ class Reels {
     if (!this.busy) this.start();
   }
   update(dt: number) {
+    if (this.attractMode) {
+      // écran d'appel : rouleaux qui défilent doucement + « JOUER » qui clignote
+      this.t0 += dt; this.pos = this.pos.map((p, i) => (p + dt * (1.2 + i * .3)) % SYM_N);
+      this.draw();
+      const c = this.cv.getContext('2d')!, on = Math.sin(this.t0 * 5) > -.3;
+      c.fillStyle = 'rgba(10,4,6,.62)'; c.fillRect(0, 128, 512, 116);
+      c.fillStyle = on ? '#ffd25a' : '#a8761e'; c.font = '86px "Bebas Neue", Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('▶  JOUER', 256, 190);
+      this.tex.needsUpdate = true;
+      return;
+    }
     if (!this.busy) return;
     this.t += dt;
     let moving = false;

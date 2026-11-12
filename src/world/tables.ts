@@ -213,7 +213,11 @@ function addStack(k: Kit, cx: number, cz: number, x: number, z: number, r: numbe
 let rlFelt: THREE.MeshStandardMaterial | null = null, wheelM: THREE.MeshStandardMaterial | null = null;
 export function roulette(k: Kit, parent: THREE.Object3D, x: number, z: number, r: number, solids: number[][]) {
   rlFelt ??= new THREE.MeshStandardMaterial({ map: rouletteFeltTex(), roughness: .95 });
-  wheelM ??= new THREE.MeshStandardMaterial({ map: wheelTex(), roughness: .3, metalness: .25 });
+  if (!wheelM) {
+    // les cases restent lisibles même dans la pénombre de la salle : légère émission de la texture
+    const wt = wheelTex(); wt.anisotropy = 8;
+    wheelM = new THREE.MeshStandardMaterial({ map: wt, emissiveMap: wt, emissive: new THREE.Color('#ffffff'), emissiveIntensity: .42, roughness: .35, metalness: 0 });
+  }
   k.add(M.wood, T(new RoundedBoxGeometry(4.7, .2, 1.75, 3, .06).translate(0, .68, 0), x, z, r));
   for (const px of [-1.5, 1.3]) k.add(M.wood, T(box(.7, .6, 1.0, px, .3, 0), x, z, r), T(box(.9, .04, 1.2, px, .02, 0), x, z, r));
   k.add(M.brass, T(cyl(.02, .02, 4.2, 0, 0, 0, 8).rotateZ(Math.PI / 2).translate(-.1, .2, .62), x, z, r), T(cyl(.02, .02, 4.2, 0, 0, 0, 8).rotateZ(Math.PI / 2).translate(-.1, .2, -.62), x, z, r));
@@ -223,14 +227,14 @@ export function roulette(k: Kit, parent: THREE.Object3D, x: number, z: number, r
   ].map(([a, b]) => new THREE.Vector3(a, .83, b)), true, 'catmullrom', .08);
   k.add(M.leather, T(new THREE.TubeGeometry(rect, 80, .07, 8, true), x, z, r));
   // cuvette du cylindre
-  k.add(M.woodLight, T(cyl(.66, .6, .16, 1.62, .86, 0, 40), x, z, r));
+  k.add(M.woodLight, T(cyl(.66, .6, .12, 1.62, .83, 0, 40), x, z, r));  // dessus à .89 : le cylindre (.925) reste visible
   k.add(M.wood, T(new THREE.TorusGeometry(.56, .045, 8, 40).rotateX(Math.PI / 2).translate(1.62, .935, 0), x, z, r));
   const wpos = new THREE.Vector3(1.62, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), r).add(new THREE.Vector3(x, 0, z));
   const wheel = new THREE.Group(); wheel.position.set(wpos.x, .925, wpos.z);
   wheel.add(new THREE.Mesh(new THREE.CircleGeometry(.5, 48).rotateX(-Math.PI / 2), wheelM));
   wheel.add(mesh([cyl(.02, .1, .16, 0, .08, 0, 12), new THREE.SphereGeometry(.035, 10, 8).translate(0, .18, 0),
     ...[0, 1, 2, 3].map(i => box(.32, .015, .015, 0, .13, 0).rotateY(i * Math.PI / 4))], M.gold, false));
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(.016, 10, 8), new THREE.MeshStandardMaterial({ color: '#fff', roughness: .2 }));
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(.018, 12, 10), new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#ffffff', emissiveIntensity: .6, roughness: .15 }));
   parent.add(wheel, ball);
   const A = Math.PI * 2 / 37;
   const ctl: RouletteCtl = { x, z, wheel: new THREE.Vector3(wpos.x, .925, wpos.z), ballA: 0, rest: -1, spin: null, t: 0,
@@ -272,8 +276,8 @@ export function roulette(k: Kit, parent: THREE.Object3D, x: number, z: number, r
   }
   const rp = new THREE.Vector3(1.0, 0, -1.25).applyAxisAngle(new THREE.Vector3(0, 1, 0), r);
   DEALERS.push({ x: x + rp.x, z: z + rp.z, yaw: r, y: 0 });
-  const hw = r % Math.PI === 0 ? [3.4, 2.1] : [2.1, 3.4];
-  solids.push([x - hw[0], z - hw[1], x + hw[0], z + hw[1]]);
+  // table + chaises (côté cylindre : pas de chaise, la collision suit le bord de la table)
+  solids.push([x - 3.35, z - 1.8, x + 2.5, z + 1.8]);
 }
 
 export interface RouletteCtl { x: number; z: number; wheel: THREE.Vector3; ballA: number; rest: number; t: number; spin: { i: number; t0: number; dur: number; a0: number; a1: number } | null; play(n: number, dur: number): void }

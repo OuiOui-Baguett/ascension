@@ -19,7 +19,8 @@ import { buildStreet } from './world/street';
 import { buildHall } from './world/hall';
 import type { World } from './world/world';
 import { Director, Rail, Walker } from './cam';
-import { startAudio, setMode, setMuted, isMuted } from './audio';
+import { startAudio, setMode, setMuted, isMuted, voice, stopNarration } from './audio';
+import { Tuto } from './tuto';
 import { Net, LOCAL } from './net';
 import { Body, Remotes, CHARACTER } from './player';
 import { Play } from './play';
@@ -38,7 +39,7 @@ renderer.setClearColor('#050507');
 renderer.info.autoReset = false;
 
 let street: World, hall: World | null = null, world: World;
-let state: 'loading' | 'title' | 'enter' | 'cine' | 'explore' = 'loading';
+let state: 'loading' | 'title' | 'enter' | 'cine' | 'explore' | 'tuto' = 'loading';
 let qualityMode: 'auto' | Quality = (params.get('quality') as Quality) ?? 'auto';
 const mirrorScale = (q: Quality) => (q === 'high' ? .5 : q === 'medium' ? .36 : .3);
 
@@ -65,6 +66,10 @@ async function start() {
   if (view === 'hall') startExplore();
   else showTitle();
   if (pendingNight) { const n = pendingNight; pendingNight = null; onStarted(n); }
+  // première visite : le maître de jeu se présente tout seul (on peut passer)
+  let seen = false; try { seen = !!localStorage.getItem('casse.tuto'); } catch { /* stockage indisponible */ }
+  $('#tuto-btn').classList.toggle('new', !seen);
+  if (!seen && state === 'title' && !params.has('clean') && !params.has('notuto')) setTimeout(() => { if (state === 'title' && !lobby) startTuto(); }, 2500);
 }
 
 async function ensureHall() {
@@ -91,9 +96,40 @@ const director = new Director(boot);
 let rail = new Rail(boot, [[0, 0, 0], [0, 0, 1]], 1, [0, 0, 0]);
 const walker = new Walker(boot, canvas, { base: $('#joy'), knob: $('#joy i') });
 director.onShot = (s, i) => {
-  if (state === 'cine') { if (i > 0) dip(); typewrite(s.text ?? ''); }
-  else if (state === 'title' && i > 0) dip();
+  if (state === 'cine') { if (i > 0) dip(); typewrite(s.text ?? ''); voice(`cine_${i}`, { narration: true }); }
+  else if ((state === 'title' || state === 'tuto') && i > 0) dip();
 };
+
+// ---------- le maître de jeu ----------
+const tuto = new Tuto(director, () => endTuto());
+async function startTuto() {
+  if (state !== 'title') return;
+  startAudio();
+  $('#title').classList.add('hidden');
+  director.stop();
+  await fade(1, .5);
+  await ensureHall();
+  if (state !== 'title') return;
+  switchTo(hall!); setMode('hall');
+  state = 'tuto';
+  document.body.classList.add('cine');
+  setDof(getQuality() !== 'low');
+  tuto.start();
+  fade(0, .9);
+}
+async function endTuto() {
+  if (state !== 'tuto') return;
+  await fade(1, .5);
+  if (state !== 'tuto') return;
+  switchTo(street); setMode('street');
+  showTitle();
+  fade(0, .9);
+}
+/** Une nuit démarre pendant l'explication : on coupe tout de suite. */
+function abortTuto() {
+  tuto.stop(false); stopNarration();
+  switchTo(street); state = 'title';
+}
 
 // ---------- états ----------
 function showTitle() {
@@ -141,6 +177,7 @@ function startExplore() {
   const fromCine = state === 'cine';
   state = 'explore';
   director.stop();
+  if (fromCine) stopNarration();
   const go = () => {
     document.body.classList.remove('cine');
     $('#skip').classList.add('hidden');
@@ -218,7 +255,7 @@ function onStarted(m: Night) {
       await fade(1, .3); await ensureHall(); switchTo(hall!); setMode('hall');
       teardownNight(); state = 'cine'; startExplore(); fade(0, .8);
     })();
-  } else if (state === 'title') { teardownNight(); enterCasino(); }
+  } else if (state === 'title' || state === 'tuto') { if (state === 'tuto') abortTuto(); teardownNight(); enterCasino(); }
 }
 
 /** Crée les corps des joueurs dans le casino (une fois par nuit). */
@@ -321,6 +358,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-ind]').forEach(b => b.onclic
 });
 document.querySelectorAll<HTMLButtonElement>('#l-dur button').forEach(b => b.onclick = () => net.send({ t: 'settings', duree: b.dataset.d as any }));
 $('#addbot').onclick = () => net.send({ t: 'bot' });
+$('#tuto-btn').onclick = () => startTuto();
+$('#tuto-btn2').onclick = () => startTuto();
 $('#start').onclick = () => { startAudio(); net.send({ t: 'start' }); };
 $('#leave').onclick = () => net.send({ t: 'leave' });
 let quitArmed = 0;
@@ -385,7 +424,7 @@ function frame(now: number) {
     if (world === hall) { remotes?.update(dt); if (!walker.active && myBody) myBody.animate(0, dt); play.update(dt); }
     sendInput(dt, now);
     if (state === 'title') focusDof(director.focus, 14);
-    else if (state === 'cine') focusDof(director.focus, Math.max(3, director.focus * .7));
+    else if (state === 'cine' || state === 'tuto') focusDof(director.focus, Math.max(3, director.focus * .7));
     else if (state === 'enter') { street.enterTick?.(rail.progress); focusDof(Math.max(2, world.camera.position.distanceTo(new THREE.Vector3(0, 2.4, -21))), 7); }
     renderer.info.reset();
     render(dt);

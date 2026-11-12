@@ -66,11 +66,50 @@ export function setMode(m: 'street' | 'hall') {
   mode = m;
   if (!ctx) return;
   const t = ctx.currentTime;
-  rainG.gain.setTargetAtTime(m === 'street' ? .32 : .07, t, .6);
+  rainG.gain.setTargetAtTime((m === 'street' ? .32 : .07) * ambient, t, .6);
   rainF.frequency.setTargetAtTime(m === 'street' ? 5200 : 420, t, .6);
-  roomG.gain.setTargetAtTime(m === 'street' ? .5 : .85, t, .6);
-  chimeG.gain.setTargetAtTime(m === 'hall' ? 1 : 0, t, .6);
+  roomG.gain.setTargetAtTime((m === 'street' ? .5 : .85) * ambient, t, .6);
+  chimeG.gain.setTargetAtTime((m === 'hall' ? 1 : 0) * ambient, t, .6);
 }
 
 export function setMuted(v: boolean) { muted = v; if (ctx) master.gain.setTargetAtTime(v ? 0 : .8, ctx.currentTime, .1); }
 export function isMuted() { return muted; }
+
+// ---------- voix (ElevenLabs) ----------
+const BASE = import.meta.env.BASE_URL + 'res/voix/';
+const buffers = new Map<string, Promise<AudioBuffer | null>>();
+let voiceG: GainNode | null = null, narr: AudioBufferSourceNode | null = null, ambient = 1;
+function load(name: string) {
+  if (!buffers.has(name)) buffers.set(name, fetch(BASE + name + '.mp3').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => ctx!.decodeAudioData(b)).catch(() => null));
+  return buffers.get(name)!;
+}
+/** Précharge des voix (évite le petit blanc à la première lecture). */
+export function preloadVoices(names: string[]) { if (ctx) for (const n of names) load(n); }
+/** Joue une réplique. pos/listener : atténuation avec la distance (croupier, caissière). */
+export async function voice(name: string, o: { gain?: number; pos?: { x: number; z: number }; listener?: { x: number; z: number }; narration?: boolean } = {}) {
+  if (!ctx) return 0;
+  voiceG ??= (() => { const g = ctx!.createGain(); g.gain.value = 1; g.connect(master); return g; })();
+  const buf = await load(name);
+  if (!buf || !ctx) return 0;
+  let gain = o.gain ?? 1;
+  if (o.pos && o.listener) { const d = Math.hypot(o.pos.x - o.listener.x, o.pos.z - o.listener.z); gain *= Math.max(0, 1 - d / 14); if (gain < .03) return 0; }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const g = ctx.createGain(); g.gain.value = gain;
+  src.connect(g).connect(voiceG);
+  if (o.narration) {
+    narr?.stop(); narr = src;
+    duck(.35);
+    src.onended = () => { if (narr === src) { narr = null; duck(1); } };
+  }
+  src.start();
+  return buf.duration;
+}
+export const audioReady = () => !!ctx && ctx.state === 'running';
+export function stopNarration() { try { narr?.stop(); } catch { /* déjà fini */ } narr = null; duck(1); }
+/** Baisse l'ambiance (pluie, salle) pendant que le maître de jeu parle. */
+function duck(v: number) {
+  ambient = v;
+  if (!ctx) return;
+  for (const g of [rainG, roomG, chimeG]) g?.gain.cancelScheduledValues(ctx.currentTime);
+  setMode(mode);
+}

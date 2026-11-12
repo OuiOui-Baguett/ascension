@@ -16,7 +16,7 @@ import { Kit, blackjack, roulette, pendant } from './tables';
 import { buildRooms, wallRun } from './rooms';
 import { buildWest } from './rooms2';
 import { Crowd, populateHall, SEATS, SLOT_SEAT } from './people';
-import { SLOT_LIST } from '../../shared/layout';
+import { SLOT_LIST, slotSeat } from '../../shared/layout';
 import type { World } from './world';
 
 const W = 18, D = 15, H = 8.6;          // demi-largeur, demi-profondeur, hauteur des bas-côtés
@@ -238,8 +238,10 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   };
   // deux îlots dos à dos + une rangée contre le mur est (plan partagé avec le serveur)
   for (const sl of SLOT_LIST) { SLOT_SEAT.push(SEATS.length); addSlot(sl.x, sl.z, sl.face, sl.v); }
-  solids.push([7.9, -10.6, 10.8, -4.4], [7.9, 2, 10.8, 8.2], [12.1, -10.6, 15, -4.4], [12.1, 2, 15, 8.2]);
-  solids.push([W - 2, -12.8, W, -4.6], [W - 2, 2.6, W, 9.8]);
+  // collisions au plus près : le meuble des machines, puis chaque tabouret
+  for (const z0 of [-10, 2.6]) for (const [xa, xb] of [[9.0, 9.72], [13.2, 13.92]]) solids.push([xa - .56, z0 - .42, xb + .56, z0 + 5.42]);
+  solids.push([W - 1.12, -12.62, W, -4.78], [W - 1.12, 2.78, W, 9.62]);
+  for (const sl of SLOT_LIST) { const q = slotSeat(sl); solids.push([q.x - .13, q.z - .13, q.x + .13, q.z + .13]); }
   for (let v = 0; v < 3; v++) { statics.add(mesh(slotGeo.cab[v], cabMats[v])); statics.add(mesh(slotGeo.top[v], topMats[v], false)); }
   const scr = mesh(slotGeo.scr, screenMat, false); scr.userData.keep = true; root.add(scr);
   statics.add(mesh(slotGeo.chr, chrome), mesh(slotGeo.blk, black), mesh(slotGeo.deck, deck), mesh(slotGeo.seat, stoolSeat));

@@ -22,3 +22,6 @@ https://polyhaven.com — domaine public.
 
 ## Polices — Google Fonts / Fontsource (SIL Open Font License)
 Bebas Neue, Special Elite, Monoton, Playfair Display.
+
+## Voix
+Voix générées avec ElevenLabs (compte du créateur du jeu) : maître de jeu, croupier, caissière.

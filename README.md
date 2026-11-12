@@ -9,6 +9,10 @@ reconnexion (étape 1). Chacun entre avec 500 €, horloge de la nuit (23 h 47 �
 qui tombe sur le numéro tiré par le serveur), machines à sous avec jackpot progressif commun.
 Pas encore d'indic, de vigiles ni de casse : les objets achetés ne font encore rien.
 
+**Voix (ElevenLabs)** : maître de jeu (explication des règles en 8 chapitres, lancée à la première visite et
+via « Le maître de jeu t'explique tout »), narration de la cinématique, croupier (annonces et les 37 numéros),
+caissière, annonce du jackpot. Fichiers dans `public/res/voix/`.
+
 ## Jouer en ligne avec des amis (hébergement gratuit sur Render)
 
 1. Va sur <https://render.com> et connecte-toi avec ton compte GitHub.

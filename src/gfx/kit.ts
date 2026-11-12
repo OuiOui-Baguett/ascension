@@ -352,21 +352,33 @@ export function blackjackFeltTex() {
 /** Cylindre de roulette vu de dessus : 37 cases. */
 export function wheelTex() {
   const ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
-  return canvasTex(512, 512, (c, w) => {
-    const R = w / 2;
+  return canvasTex(1024, 1024, (c, w) => {
+    const R = w / 2, n = ORDER.length, a = Math.PI * 2 / n;
     c.translate(R, R);
-    c.fillStyle = '#3a1d0c'; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill();
-    const n = ORDER.length, a = Math.PI * 2 / n;
+    // jante en bois verni
+    const rim = c.createRadialGradient(0, 0, R * .8, 0, 0, R);
+    rim.addColorStop(0, '#6b3a18'); rim.addColorStop(.6, '#8f5326'); rim.addColorStop(1, '#3a1d0c');
+    c.fillStyle = rim; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill();
+    // bande des numéros (extérieur) puis cases (intérieur), couleurs franches
+    const col = (num: number, i: number) => num === 0 ? '#11a84f' : (i % 2 ? '#1c1c1c' : '#e0182a');
     ORDER.forEach((num, i) => {
-      c.fillStyle = num === 0 ? '#0f7a3a' : (i % 2 ? '#141414' : '#a8101b');
-      c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R * .92, i * a, (i + 1) * a); c.closePath(); c.fill();
-      c.save(); c.rotate((i + .5) * a + Math.PI / 2); c.fillStyle = '#f4ecd8'; c.font = 'bold 18px Georgia'; c.textAlign = 'center';
-      c.fillText(String(num), 0, -R * .82); c.restore();
+      c.fillStyle = col(num, i);
+      c.beginPath(); c.arc(0, 0, R * .93, i * a, (i + 1) * a); c.arc(0, 0, R * .5, (i + 1) * a, i * a, true); c.closePath(); c.fill();
+      // reflet doux au centre de chaque case
+      const g = c.createRadialGradient(Math.cos((i + .5) * a) * R * .66, Math.sin((i + .5) * a) * R * .66, 2, Math.cos((i + .5) * a) * R * .66, Math.sin((i + .5) * a) * R * .66, R * .12);
+      g.addColorStop(0, 'rgba(255,255,255,.18)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g; c.fill();
+      c.save(); c.rotate((i + .5) * a + Math.PI / 2); c.fillStyle = '#fff8e6'; c.font = 'bold 40px Georgia'; c.textAlign = 'center';
+      c.fillText(String(num), 0, -R * .815); c.restore();
     });
-    c.strokeStyle = '#d4a64a'; c.lineWidth = 3;
-    for (let i = 0; i < n; i++) { c.beginPath(); c.moveTo(Math.cos(i * a) * R * .55, Math.sin(i * a) * R * .55); c.lineTo(Math.cos(i * a) * R * .92, Math.sin(i * a) * R * .92); c.stroke(); }
-    c.fillStyle = '#5a2e12'; c.beginPath(); c.arc(0, 0, R * .55, 0, 7); c.fill();
-    c.strokeStyle = '#d4a64a'; c.beginPath(); c.arc(0, 0, R * .55, 0, 7); c.stroke(); c.beginPath(); c.arc(0, 0, R * .74, 0, 7); c.stroke();
+    // séparateurs dorés et anneaux
+    c.strokeStyle = '#f2c96a'; c.lineWidth = 5;
+    for (let i = 0; i < n; i++) { c.beginPath(); c.moveTo(Math.cos(i * a) * R * .5, Math.sin(i * a) * R * .5); c.lineTo(Math.cos(i * a) * R * .93, Math.sin(i * a) * R * .93); c.stroke(); }
+    for (const k of [.5, .755, .93]) { c.lineWidth = k === .755 ? 4 : 7; c.beginPath(); c.arc(0, 0, R * k, 0, 7); c.stroke(); }
+    // cône central
+    const cone = c.createRadialGradient(-R * .08, -R * .08, 4, 0, 0, R * .5);
+    cone.addColorStop(0, '#c98a44'); cone.addColorStop(.7, '#6b3a18'); cone.addColorStop(1, '#3a1d0c');
+    c.fillStyle = cone; c.beginPath(); c.arc(0, 0, R * .49, 0, 7); c.fill();
   });
 }
 
@@ -400,7 +412,7 @@ export function topperTex(title: string, c1: string, c2: string) {
     c.font = '92px Monoton'; c.shadowColor = c1; c.shadowBlur = 24; c.fillStyle = c1;
     c.fillText(title, w / 2, h * .46);
     c.shadowBlur = 0; c.font = 'bold 30px Georgia'; c.fillStyle = '#ffe9b0';
-    c.fillText('★  MISE MAX 500  ★', w / 2, h * .82);
+    c.fillText('★  MISE MAX 100 €  ★', w / 2, h * .82);
   });
 }
 

@@ -33,6 +33,7 @@
       <div id="v-home" class="view">
         <div class="dl"><span>Objectif</span><b>Grand Casino — la caisse</b></div>
         <div class="dl"><span>Équipe</span><b>3 à 8 · dont au moins un indic</b></div>
+        <button id="tuto-btn" class="tuto-btn">Le maître de jeu t'explique tout <s>▸</s></button>
         <label class="field"><span>Ton pseudo</span><input id="name" maxlength="16" placeholder="Ton prénom" autocomplete="off" spellcheck="false" enterkeyhint="done"></label>
         <nav>
           <button id="create" class="primary">Créer une partie <s>▸</s></button>
@@ -51,7 +52,7 @@
         </div>
         <nav>
           <button id="start" class="primary">Lancer la nuit <s>▸</s></button>
-          <div class="row"><button id="addbot">+ Ajouter un bot</button><button id="leave">Quitter</button></div>
+          <div class="row"><button id="addbot">+ Ajouter un bot</button><button id="tuto-btn2">Règles</button><button id="leave">Quitter</button></div>
         </nav>
         <div class="note" id="l-note"></div>
       </div>
@@ -103,6 +104,15 @@
     <div id="s-msg"></div>
     <details><summary>Table des gains</summary><div id="s-pays"></div></details>
   </section>
+
+  <div id="tuto" class="hidden">
+    <div class="t-top"><span class="t-kick">Le maître de jeu</span><h2 id="t-title"></h2><span id="t-num"></span></div>
+    <div id="t-dots"></div>
+    <div id="t-card" class="tcard"></div>
+    <div id="t-sub"></div>
+    <button id="t-sound" class="hidden">🔊 Toucher pour entendre le maître de jeu</button>
+    <div class="t-btns"><button id="t-skip">Passer ✕</button><button id="t-next">Suivant ▸</button></div>
+  </div>
 
   <div id="fade"></div>
   <div id="wait" class="hidden">…</div>
