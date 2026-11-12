@@ -214,6 +214,7 @@ const play = new Play({
   net, walker, cam: () => world.camera, scene: () => hall?.scene ?? null, body: () => myBody, remotes: () => remotes,
   names: () => new Map((lobby?.players ?? []).map(p => [p.id, p.name])),
   toast: (a, b) => toast(a, b), error: m => showError(m),
+  avatars: () => new Map((night?.players ?? []).map(p => [p.id, p.avatar])),
 });
 
 net.onStatus = s => {
@@ -235,6 +236,7 @@ net.onMsg = m => {
     case 'gone': remotes?.remove(m.id); break;
     case 'left': lobby = null; night = null; if (state === 'explore' || state === 'cine') backToStreet(); else renderMenu(); break;
     case 'error': showError(m.msg); break;
+    case 'end': showEnd(m); break;
   }
 };
 
@@ -279,6 +281,23 @@ function teardownNight() {
   myBody?.dispose(); myBody = null; walker.body = null;
 }
 
+/** Fin de la nuit : on révèle tous les rôles, puis retour au salon. */
+function showEnd(m: Extract<ServerMsg, { t: 'end' }>) {
+  const names = new Map((night?.players ?? lobby?.players ?? []).map(p => [p.id, p.name]));
+  const av = new Map((night?.players ?? []).map(p => [p.id, p.avatar]));
+  const mine = m.roles.find(r => r[0] === net.id)?.[1];
+  const won = mine === m.winner;
+  $('#end h2').textContent = m.winner === 'team' ? 'L\'équipe gagne' : (m.roles.filter(r => r[1] === 'indic').length > 1 ? 'Les indics gagnent' : 'L\'indic gagne');
+  $('#end').classList.toggle('indic', m.winner === 'indic');
+  $('#end .why').textContent = m.reason;
+  $('#end .you').textContent = mine ? (won ? 'Bien joué : ton camp l\'emporte.' : 'Perdu pour cette fois.') : '';
+  $('#end ul').innerHTML = m.roles.map(([id, r]) => `<li class="${r}"><b>${esc(names.get(id) ?? '?')}</b><span>${esc(CHARACTER[av.get(id) ?? ''] ?? '')}</span><em>${r === 'indic' ? 'Indic' : 'Équipe'}</em></li>`).join('');
+  $('#end').classList.remove('hidden');
+  night = null; nightSeed = -1;
+  if (state === 'explore' || state === 'cine' || state === 'enter') backToStreet();
+}
+$('#end button').onclick = () => $('#end').classList.add('hidden');
+
 // envoi de sa position au serveur, ~15 fois par seconde
 let sendAcc = 0, lastSent = '', lastSentAt = 0;
 function sendInput(dt: number, now: number) {
@@ -291,7 +310,7 @@ function sendInput(dt: number, now: number) {
   if (play.mode === 'slot') return;
   if (key === lastSent && now - lastSentAt < 1000) return;
   lastSent = key; lastSentAt = now;
-  net.send({ t: 'input', x, z, yaw, mv });
+  net.send({ t: 'input', x, z, yaw, mv, cy: +walker.yaw.toFixed(2) });
 }
 
 function renderMenu() {
@@ -308,7 +327,9 @@ function renderMenu() {
   $('#l-code').textContent = LOCAL ? 'SOLO' : lobby.code;
   $('#l-players').innerHTML = lobby.players.map(p =>
     `<li class="${p.online ? '' : 'off'} ${p.id === net.id ? 'me' : ''}">${p.id === lobby!.host ? '★ ' : ''}${esc(p.name)}${p.id === net.id ? ' <i>toi</i>' : ''}${p.bot ? ' <i>bot</i>' : ''}${p.online ? '' : ' <i>déco</i>'}</li>`).join('');
-  $('#l-ind').textContent = String(lobby.settings.indics);
+  $('#l-ind').textContent = lobby.settings.secret ? `0 à ${lobby.maxIndics}` : String(lobby.settings.indics);
+  $('#l-secret').textContent = lobby.settings.secret ? 'Secret (tiré au sort)' : 'Annoncé';
+  $('#l-secret').classList.toggle('on', !!lobby.settings.secret);
   document.querySelectorAll<HTMLButtonElement>('#l-dur button').forEach(b => b.classList.toggle('on', b.dataset.d === lobby!.settings.duree));
   ($('#start') as HTMLButtonElement).style.display = host ? '' : 'none';
   ($('#addbot') as HTMLButtonElement).style.display = host ? '' : 'none';
@@ -317,7 +338,7 @@ function renderMenu() {
   const hostName = lobby.players.find(p => p.id === lobby!.host)?.name ?? 'l\'hôte';
   $('#l-note').textContent = !host ? `En attente que ${hostName} lance la nuit…`
     : n < 3 ? `${n} joueur${n > 1 ? 's' : ''} : il en faut 3 pour une vraie partie. Pour tester, tu peux lancer quand même ou ajouter des bots.`
-    : `Équipe au complet ? Lance la nuit. Les indics restent secrets (rôles à l'étape suivante).`;
+    : `Équipe au complet ? Lance la nuit. Les rôles sont tirés au sort en secret au début de la nuit.`;
 }
 function updateBadge() {
   const n = lobby?.players.length ?? 0;
@@ -359,6 +380,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-ind]').forEach(b => b.onclic
 document.querySelectorAll<HTMLButtonElement>('#l-dur button').forEach(b => b.onclick = () => net.send({ t: 'settings', duree: b.dataset.d as any }));
 $('#addbot').onclick = () => net.send({ t: 'bot' });
 $('#tuto-btn').onclick = () => startTuto();
+$('#l-secret').onclick = () => { if (lobby) net.send({ t: 'settings', secret: !lobby.settings.secret }); };
 $('#tuto-btn2').onclick = () => startTuto();
 $('#start').onclick = () => { startAudio(); net.send({ t: 'start' }); };
 $('#leave').onclick = () => net.send({ t: 'leave' });

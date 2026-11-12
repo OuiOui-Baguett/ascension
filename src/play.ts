@@ -3,9 +3,10 @@
 // Le serveur décide de tout (soldes, stocks, tirages) ; ici on affiche et on met en scène.
 // ============================================================
 import * as THREE from 'three';
-import type { ServerMsg, TableState } from '../shared/protocol';
-import { ITEMS } from '../shared/items';
-import { CAISSE, ROULETTES, SLOT_LIST, slotSeat, dist2, clockText } from '../shared/layout';
+import type { ServerMsg, TableState, MeetState } from '../shared/protocol';
+import { ITEMS, TRAP_ITEMS, TRAP_LIMIT } from '../shared/items';
+import { CAISSE, ROULETTES, SLOT_LIST, slotSeat, dist2, clockText, MEET_SPOTS } from '../shared/layout';
+import { CHARACTER } from './player';
 import { SLOT_BETS, SLOT_PAYS, CHIPS, RED, BET_LABEL, ROUL_PHASES, type BetKind } from '../shared/games';
 import { ROULETTE_CTL } from './world/tables';
 import { SEATS, SLOT_SEAT } from './world/people';
@@ -22,11 +23,11 @@ const CASHIER = { x: 0, z: -13.2 };
 const eur = (n: number) => n.toLocaleString('fr-FR') + ' €';
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
-type Mode = 'walk' | 'shop' | 'bag' | 'give' | 'roul' | 'slot';
+type Mode = 'walk' | 'shop' | 'bag' | 'give' | 'roul' | 'slot' | 'notes';
 interface Ctx {
   net: Net; walker: Walker; cam: () => THREE.PerspectiveCamera; scene: () => THREE.Scene | null;
   body: () => Body | null; remotes: () => Remotes | null; names: () => Map<string, string>;
-  toast: (line: string, big: string) => void; error: (msg: string) => void;
+  toast: (line: string, big: string) => void; error: (msg: string) => void; avatars: () => Map<string, string>;
 }
 
 export class Play {
@@ -34,7 +35,9 @@ export class Play {
   prices: Record<string, number> = {}; stock: Record<string, number> = {};
   jackpot = 0; mode: Mode = 'walk'; on = false;
   private clock0 = 0; private dur = 1; private clockTxt = '';
-  private near: { kind: 'caisse' | 'roul' | 'slot'; i: number } | null = null;
+  private near: { kind: 'caisse' | 'roul' | 'slot' | 'meet'; i: number } | null = null;
+  role: 'team' | 'indic' = 'team'; nIndics: number | undefined; heat = 0; paused = 0; meetLeft = 2; myMeet = false; traps = 0;
+  out = new Set<string>(); proofs: { text: string }[] = []; meet: MeetState | null = null; private meetAt = 0; private frozen = 0; private shopTab: 'normal' | 'trap' = 'normal';
   private giveTo: string | null = null;
   private table = -1; private ts: TableState | null = null; private chip = 50; private tsAt = 0;
   private slot = -1; private bet = 10; private reel: Reels | null = null;
@@ -50,9 +53,12 @@ export class Play {
     this.on = true; this.clock0 = performance.now() - elapsed; this.dur = dur;
     $('#play').classList.remove('hidden');
     setJackpotBoard(this.jackpot);
-    this.renderMoney();
+    this.renderMoney(); this.renderHeat();
+    this.showRole();
   }
   stop() {
+    this.hideMeet(); $('#role').classList.add('hidden');
+    this.proofs = []; this.out.clear(); this.meet = null; this.renderNotes();
     this.close(false);
     this.on = false; $('#play').classList.add('hidden');
     this.reel?.dispose(); this.reel = null;
@@ -80,6 +86,18 @@ export class Play {
         else { this.holdMoney = null; this.money = m.money; this.renderMoney(); }
         break;
       case 'rtab': if (m.s.id === this.table) this.onTable(m.s); break;
+      case 'role': this.role = m.role; this.nIndics = m.n; this.shopTab = 'normal'; if (this.on) this.showRole(); break;
+      case 'state':
+        this.heat = m.heat; this.paused = m.paused; this.meetLeft = m.meetLeft; this.myMeet = m.myMeet; this.traps = m.traps;
+        this.out = new Set(m.out); this.c.remotes()?.setHidden(this.out); this.renderHeat();
+        if (this.out.has(this.c.net.id)) { $('#p-out').classList.remove('hidden'); if (this.mode !== 'walk' && this.mode !== 'notes') this.close(); }
+        if (this.mode === 'shop') this.renderShop();
+        break;
+      case 'proof':
+        this.proofs.push({ text: m.text }); this.renderNotes();
+        this.c.toast('Preuve notée dans ton carnet', '🔍 Enveloppe rouge');
+        break;
+      case 'meeting': this.onMeeting(m.m); break;
       case 'error':
         if (this.mode === 'shop') this.say(/stock/.test(m.msg) ? 'caisse_epuise' : /argent/.test(m.msg) ? 'caisse_argent' : '', CASHIER);
         return false;
@@ -96,8 +114,12 @@ export class Play {
   update(dt: number) {
     if (!this.on) return false;
     const now = performance.now();
-    const txt = clockText(now - this.clock0, this.dur);
-    if (txt !== this.clockTxt) { this.clockTxt = txt; $('#p-clock').textContent = now - this.clock0 >= this.dur ? '3 h 00 · fermeture' : txt; }
+    // l'horloge s'arrête pendant les réunions de crise
+    const el = this.meet ? this.frozen : now - this.clock0 - this.paused;
+    if (!this.meet) this.frozen = el;
+    const txt = clockText(el, this.dur);
+    if (txt !== this.clockTxt) { this.clockTxt = txt; $('#p-clock').textContent = el >= this.dur ? '3 h 00 · fermeture' : txt; }
+    if (this.meet) this.tickMeet();
     if (this.mode === 'walk') this.findNear();
     if (this.mode === 'roul') { this.tableCam(dt); this.tickTable(); return true; }
     if (this.mode === 'slot') { this.slotCam(dt); this.reel?.update(dt); return true; }
@@ -108,7 +130,9 @@ export class Play {
   private findNear() {
     const p = this.c.walker.pos;
     let near: Play['near'] = null;
-    if (dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.4 ** 2) near = { kind: 'caisse', i: 0 };
+    if (this.out.has(this.c.net.id)) { $('#p-act').classList.add('hidden'); $('#p-give').classList.add('hidden'); return; }
+    MEET_SPOTS.forEach((m, i) => { if (!near && !this.myMeet && this.meetLeft > 0 && dist2(p.x, p.z, m.x, m.z) < 2.4 ** 2) near = { kind: 'meet', i }; });
+    if (!near && dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.4 ** 2) near = { kind: 'caisse', i: 0 };
     ROULETTES.forEach((t, i) => { if (!near && Math.abs(p.x - t.x) < 3.7 && Math.abs(p.z - t.z) < 2.7) near = { kind: 'roul', i }; });
     if (!near) {
       // la machine visée : proche ET dans la direction où l'on regarde (plus de mauvaise machine)
@@ -137,7 +161,8 @@ export class Play {
     this.attract?.update(1 / 60);
     const act = $('#p-act');
     act.classList.toggle('hidden', !near);
-    if (near) act.innerHTML = near.kind === 'caisse' ? 'Caisse<small>acheter</small>' : near.kind === 'roul' ? 'Roulette<small>jouer</small>' : 'Machine<small>s\'asseoir</small>';
+    if (near) act.innerHTML = near.kind === 'meet' ? 'Réunion<small>de crise</small>' : near.kind === 'caisse' ? 'Caisse<small>acheter</small>' : near.kind === 'roul' ? 'Roulette<small>jouer</small>' : 'Machine<small>s\'asseoir</small>';
+    act.classList.toggle('alarm', near?.kind === 'meet');
     // donner : le joueur le plus proche à moins de 2 m
     let who: string | null = null, bd = 2 * 2;
     for (const [id, r] of this.c.remotes()?.map ?? []) {
@@ -152,6 +177,7 @@ export class Play {
 
   private act() {
     const n = this.near; if (!n) return;
+    if (n.kind === 'meet') { this.c.net.send({ t: 'meet' }); return; }
     if (n.kind === 'caisse') { this.open('shop'); this.say('caisse_bonsoir', CASHIER); }
     else if (n.kind === 'roul') {
       this.table = n.i; this.ts = null; this.open('roul');
@@ -179,10 +205,11 @@ export class Play {
     this.mode = mode;
     this.c.walker.active = false;
     $('#p-act').classList.add('hidden'); $('#p-give').classList.add('hidden');
-    const id = { shop: '#shop', bag: '#bag', give: '#give', roul: '#roul', slot: '#slot' }[mode as Exclude<Mode, 'walk'>];
+    const id = { shop: '#shop', bag: '#bag', give: '#give', roul: '#roul', slot: '#slot', notes: '#notes' }[mode as Exclude<Mode, 'walk'>];
     $(id).classList.remove('hidden');
     if (mode === 'shop') this.renderShop();
     if (mode === 'bag') this.renderBag();
+    if (mode === 'notes') this.renderNotes();
     if (mode === 'roul') this.renderTable();
     if (mode === 'slot') this.renderSlot();
     document.body.classList.add('panel-open');
@@ -204,9 +231,80 @@ export class Play {
     if (reactivate) this.c.walker.active = this.on;
   }
 
+  // ---------- l'indic, les preuves, la chaleur ----------
+  private myVote = '';
+  private showRole() {
+    const el = $('#role'), indic = this.role === 'indic';
+    el.classList.toggle('indic', indic);
+    const n = this.nIndics;
+    $('#role h2').textContent = indic ? 'Tu es l\'indic' : 'Tu es de l\'équipe';
+    $('#role p').innerHTML = indic
+      ? 'Tu renseignes la police. Joue comme les autres, mais à la caisse tu as un <b>menu piégé</b> : chaque coup part tout de suite et la caissière te tend une <b>enveloppe rouge</b>. Si quelqu\'un te voit, il a une preuve. Ne te fais pas griller.'
+      : 'Préparez le casse ensemble : jouez, achetez, repérez. Ouvrez l\'œil à la caisse : celui qui reçoit une <b>enveloppe rouge</b> est un indic. Une réunion de crise se lance depuis les toilettes ou la radio de la camionnette (entrée).';
+    $('#role small').textContent = n === undefined ? 'Nombre d\'indics : secret' : n === 0 ? 'Cette nuit : aucun indic, 100 % coopératif' : `Cette nuit : ${n} indic${n > 1 ? 's' : ''} parmi vous${indic && n > 1 ? ' (vous ne vous connaissez pas)' : ''}`;
+    el.classList.remove('hidden');
+  }
+  private renderHeat() {
+    $('#p-heat i').style.width = this.heat + '%';
+    $('#p-heat span').textContent = `Chaleur ${this.heat} %`;
+    $('#p-heat').classList.toggle('hot', this.heat >= 60);
+  }
+  private renderNotes() {
+    $('#p-notes small').textContent = this.proofs.length ? String(this.proofs.length) : '';
+    const html = this.proofs.length ? this.proofs.map(p => `<li><div>🔍 ${esc(p.text)}</div></li>`).join('')
+      : '<li class="empty">Aucune preuve pour l\'instant. Garde un œil sur la caisse : un indic qui achète un coup piégé reçoit une enveloppe rouge.</li>';
+    $('#notes-list').innerHTML = html; $('#m-proofs').innerHTML = html;
+  }
+  private onMeeting(m: MeetState | null) {
+    const prev = this.meet;
+    this.meet = m; this.meetAt = performance.now();
+    if (!m) { this.hideMeet(); if (this.on && this.mode === 'walk') this.c.walker.active = true; return; }
+    if (!prev) { this.close(false); this.c.walker.active = false; this.myVote = ''; this.c.body()?.stand(); $('#meet').classList.remove('hidden'); document.body.classList.add('meeting'); }
+    this.renderMeet();
+  }
+  private hideMeet() { $('#meet').classList.add('hidden'); document.body.classList.remove('meeting'); this.meet = null; }
+  private tickMeet() {
+    const m = this.meet!; const left = Math.max(0, Math.ceil((m.left - (performance.now() - this.meetAt)) / 1000));
+    const t = m.ph === 'reveal' ? '' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    const el = $('#m-time'); if (el.textContent !== t) el.textContent = t;
+  }
+  private renderMeet() {
+    const m = this.meet; if (!m) return;
+    const names = this.c.names(), av = this.c.avatars(), me = this.c.net.id;
+    $('#m-by').textContent = `appelée par ${names.get(m.by) ?? '?'}`;
+    const ph = $('#m-phase');
+    if (m.ph === 'talk') ph.innerHTML = 'Parlez-vous sur Discord : qui a vu quoi ? Le vote s\'ouvre à la fin du compte à rebours.';
+    else if (m.ph === 'vote') ph.innerHTML = this.out.has(me) ? 'Tu as été écarté : tu ne votes plus.' : this.myVote ? 'Vote enregistré. Tu peux encore changer d\'avis.' : '<b>Votez !</b> Touchez le joueur à écarter, ou « Passer ».';
+    else {
+      const o = m.out;
+      ph.innerHTML = !o ? '<b>Personne n\'est écarté.</b> Égalité ou trop de « passer ».'
+        : m.outRole === 'indic' ? `<b class="red">${esc(names.get(o) ?? '?')} était l'indic !</b> La chaleur retombe de 25 %.`
+        : `<b>${esc(names.get(o) ?? '?')} était innocent.</b> La chaleur monte de 15 % et l'équipe perd un joueur.`;
+    }
+    const counts = new Map(m.counts ?? []);
+    const cell = (id: string, label: string, sub: string) => {
+      const voted = m.voted.includes(id), mine = this.myVote === id;
+      return `<button data-v="${id}" class="${mine ? 'mine' : ''} ${m.out === id ? (m.outRole === 'indic' ? 'outI' : 'outT') : ''}" ${m.ph !== 'vote' ? 'disabled' : ''}>
+        <b>${esc(label)}</b><span>${esc(sub)}</span>${voted && m.ph !== 'reveal' ? '<i>a voté</i>' : ''}${m.ph === 'reveal' && counts.get(id) ? `<em>${counts.get(id)} voix</em>` : ''}</button>`;
+    };
+    $('#m-grid').innerHTML = m.alive.map(id => cell(id, (names.get(id) ?? '?') + (id === me ? ' (toi)' : ''), CHARACTER[av.get(id) ?? ''] ?? '')).join('')
+      + cell('skip', 'Passer', 'ne pas voter contre quelqu\'un');
+  }
+
   // ---------- caisse et sac ----------
   private renderShop() {
     $('#shop-money').textContent = eur(this.money);
+    const tabs = $('#shop-tabs');
+    tabs.classList.toggle('hidden', this.role !== 'indic');
+    tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.tab === this.shopTab));
+    $('#shop').classList.toggle('trap', this.role === 'indic' && this.shopTab === 'trap');
+    if (this.role === 'indic' && this.shopTab === 'trap') {
+      const left = TRAP_LIMIT - this.traps;
+      $('#shop-list').innerHTML = TRAP_ITEMS.map(it => `<li><div><b>${it.name}</b><p>${it.desc}</p></div>
+        <button data-buy="${it.id}" ${left > 0 && this.money >= it.price ? '' : 'disabled'}><span>${eur(it.price)}</span><small>${left > 0 ? `${left} coup${left > 1 ? 's' : ''}` : 'fini'}</small></button></li>`).join('')
+        + `<li class="empty"><div>Effet immédiat. La caissière te tend une <b>enveloppe rouge</b> : tous ceux qui te voient à ce moment-là reçoivent une preuve. Achète quand personne ne regarde.</div></li>`;
+      return;
+    }
     $('#shop-list').innerHTML = ITEMS.map(it => {
       const price = this.prices[it.id] ?? it.price, left = this.stock[it.id] ?? 0, mine = this.inv[it.id] ?? 0;
       const ok = left > 0 && this.money >= price;
@@ -330,6 +428,13 @@ export class Play {
     $('#p-act').onclick = () => this.act();
     $('#p-give').onclick = () => { if (this.giveTo) { $('#give-who').textContent = this.c.names().get(this.giveTo) ?? ''; this.open('give'); } };
     $('#p-bag').onclick = () => this.open('bag');
+    $('#p-notes').onclick = () => this.open('notes');
+    document.querySelectorAll<HTMLElement>('#shop-tabs button').forEach(b => b.onclick = () => { this.shopTab = b.dataset.tab as any; this.renderShop(); });
+    $('#role .go').onclick = () => $('#role').classList.add('hidden');
+    $('#m-grid').onclick = e => {
+      const b = (e.target as HTMLElement).closest('[data-v]') as HTMLElement | null;
+      if (b && this.meet?.ph === 'vote' && !this.out.has(this.c.net.id)) { this.c.net.send({ t: 'vote', target: b.dataset.v! }); this.myVote = b.dataset.v!; this.renderMeet(); }
+    };
     document.querySelectorAll<HTMLElement>('.panel .x').forEach(b => b.onclick = () => this.close());
     $('#shop-list').onclick = e => {
       const b = (e.target as HTMLElement).closest('[data-buy]') as HTMLElement | null;

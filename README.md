@@ -3,7 +3,12 @@
 Jeu de braquage coopératif pour 3 à 8 joueurs sur mobile, avec un ou plusieurs indics cachés dans l'équipe.
 Navigateur (lien / PWA), Three.js + Vite + TypeScript, serveur Node (WebSocket).
 
-**État actuel : étape 2 — argent et caisse.** Parties par code, personnage tiré au sort, vue à l'épaule,
+**État actuel : étape 3 — l'indic.** Tirage secret des rôles (nombre annoncé ou secret), menu piégé de la caisse
+(tuyau aux flics, faux code, balise), enveloppe rouge visible, témoins calculés par le serveur (distance, regard,
+obstacles), carnet de preuves, jauge de chaleur, réunion de crise (toilettes ou radio près de l'entrée) avec vote,
+camp révélé, fins de partie (descente de police, indics démasqués, fermeture à 3 h). En solo, un bot peut être l'indic.
+
+**Étape 2 — argent et caisse.** Parties par code, personnage tiré au sort, vue à l'épaule,
 reconnexion (étape 1). Chacun entre avec 500 €, horloge de la nuit (23 h 47 → 3 h), caisse avec les 11 objets
 (prix ±30 % et stocks par nuit), sac, dons d'argent entre joueurs, roulette européenne à plusieurs (vraie bille
 qui tombe sur le numéro tiré par le serveur), machines à sous avec jackpot progressif commun.

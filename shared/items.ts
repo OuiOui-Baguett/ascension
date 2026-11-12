@@ -14,3 +14,13 @@ export const ITEMS: Item[] = [
   { id: 'perceuse', name: 'Perceuse thermique', price: 2000, stock: 1, desc: 'Perce la chambre forte en 90 s. Très bruyante.' },
 ];
 export const START_MONEY = 500;
+
+/** Menu piégé de la caisse, visible seulement par l'indic : l'effet part tout de suite. */
+export interface TrapItem { id: string; name: string; price: number; desc: string; seen: 'envelope' | 'phone' }
+export const TRAP_ITEMS: TrapItem[] = [
+  { id: 'tuyau', name: 'Tuyau aux flics', price: 300, desc: '+15 % de chaleur, tout de suite.', seen: 'envelope' },
+  { id: 'fauxcode', name: 'Faux code', price: 500, desc: 'Un chiffre du code de la chambre forte devient faux (servira au casse).', seen: 'envelope' },
+  { id: 'balise', name: 'Balise sur la camionnette', price: 800, desc: 'La fuite prendra 30 s de plus (servira au casse).', seen: 'envelope' },
+];
+/** Nombre de coups piégés par indic et par nuit */
+export const TRAP_LIMIT = 5;

@@ -26,3 +26,35 @@ export function clockText(elapsed: number, dur: number) {
   const h = Math.floor(m / 60) % 24, mm = m % 60;
   return `${h} h ${String(mm).padStart(2, '0')}`;
 }
+
+// ---------- lignes de vue (témoins) ----------
+/** La galerie principale : un témoin doit s'y trouver pour voir la caisse. */
+export const HALL_RECT = [-18, -15, 18, 15];
+/** Ce qui coupe la vue dans la galerie : colonnes, cloisons, Grande Roue, bustes, îlots de machines. */
+export const OCCLUDERS: number[][] = [
+  [-2.1, -2.1, 2.1, 2.1],
+  ...[-4.6, 4.6].flatMap(x => [-10.5, -4.5, 1.5, 7.5].map(z => [x - .46, z - .46, x + .46, z + .46])),
+  ...[-4.6, 4.6].flatMap(x => [-7.5, 4.5, 10.5].map(z => [x - .32, z - .32, x + .32, z + .32])),
+  ...[-6.2, 6.2].flatMap(x => [[-12.3, -6.4], [-3.6, 5.6], [8.4, 15]].map(([a, b]) => [x - .25, a, x + .25, b])),
+  [8.44, -10.42, 10.28, -4.58], [8.44, 2.18, 10.28, 8.02], [12.64, -10.42, 14.48, -4.58], [12.64, 2.18, 14.48, 8.02],
+];
+const segHitsRect = (ax: number, az: number, bx: number, bz: number, r: number[]) => {
+  // Liang-Barsky
+  let t0 = 0, t1 = 1;
+  const dx = bx - ax, dz = bz - az;
+  for (const [p, q] of [[-dx, ax - r[0]], [dx, r[2] - ax], [-dz, az - r[1]], [dz, r[3] - az]]) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t0 < t1;
+};
+export function losClear(ax: number, az: number, bx: number, bz: number, extra: number[][] = []) {
+  for (const r of [...OCCLUDERS, ...extra]) if (segHitsRect(ax, az, bx, bz, r)) return false;
+  return true;
+}
+export const inRect = (x: number, z: number, r: number[]) => x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3];
+
+// ---------- réunions de crise ----------
+export const MEET_SPOTS = [{ x: -27.8, z: 11, label: 'Toilettes' }, { x: 0, z: 14, label: 'Radio de la camionnette' }];
+export const MEET_MS = { talk: 75000, vote: 30000, reveal: 9000 };

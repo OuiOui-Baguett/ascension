@@ -48,6 +48,7 @@
         <ul id="l-players"></ul>
         <div class="sets">
           <div class="set"><span>Indics</span><div class="step"><button data-ind="-1">−</button><b id="l-ind">1</b><button data-ind="1">+</button></div></div>
+          <div class="set"><span>Nombre d'indics</span><button id="l-secret" class="tog">Annoncé</button></div>
           <div class="set"><span>Durée</span><div class="seg" id="l-dur"><button data-d="courte">15 min</button><button data-d="normale">20 min</button><button data-d="longue">30 min</button></div></div>
         </div>
         <nav>
@@ -70,7 +71,9 @@
     <div id="toast"></div>
     <div id="joy"><i></i></div>
     <div id="play" class="hidden">
-      <div id="p-top"><span id="p-clock">23 h 47</span><b id="p-money">500 €</b><button id="p-bag">Sac <small></small></button></div>
+      <div id="p-top"><span id="p-clock">23 h 47</span><b id="p-money">500 €</b><button id="p-bag">Sac <small></small></button><button id="p-notes">Carnet <small></small></button></div>
+      <div id="p-heat"><i></i><span>Chaleur 0 %</span></div>
+      <div id="p-out" class="hidden">Tu as été écarté : tu observes la fin de la nuit.</div>
       <button id="p-act" class="act hidden">Caisse<small>acheter</small></button>
       <button id="p-give" class="act sub hidden">Donner<small>à …</small></button>
     </div>
@@ -78,12 +81,18 @@
 
   <section id="shop" class="panel hidden">
     <header><h2>La caisse</h2><span class="pm">Ton argent : <b id="shop-money"></b></span><button class="x">Fermer</button></header>
+    <div id="shop-tabs" class="hidden"><button data-tab="normal">Le menu</button><button data-tab="trap">Menu de l'inspecteur</button></div>
     <ul id="shop-list" class="items"></ul>
     <p class="foot">Tout s'achète ici, à la vue de tous. Les objets serviront pendant le casse : ils ne font encore rien dans cette version.</p>
   </section>
   <section id="bag" class="panel hidden">
     <header><h2>Ton sac</h2><button class="x">Fermer</button></header>
     <ul id="bag-list" class="items"></ul>
+  </section>
+  <section id="notes" class="panel hidden">
+    <header><h2>Ton carnet</h2><button class="x">Fermer</button></header>
+    <ul id="notes-list" class="items"></ul>
+    <p class="foot">Les preuves ne s'inventent pas : seul le serveur sait qui a vu quoi. Lis-les aux autres pendant la réunion de crise.</p>
   </section>
   <section id="give" class="panel small hidden">
     <header><h2>Donner à <span id="give-who"></span></h2><button class="x">Annuler</button></header>
@@ -104,6 +113,15 @@
     <div id="s-msg"></div>
     <details><summary>Table des gains</summary><div id="s-pays"></div></details>
   </section>
+
+  <div id="role" class="hidden"><div class="rcard"><span class="kick">Rôle secret · ne montre pas ton écran</span><h2></h2><p></p><small></small><button class="go">Compris ▸</button></div></div>
+  <div id="meet" class="hidden"><div class="mbox">
+    <header><div><span class="kick">Réunion de crise</span><h2 id="m-by"></h2></div><b id="m-time"></b></header>
+    <p id="m-phase"></p>
+    <div id="m-grid"></div>
+    <details><summary>Mes preuves</summary><ul id="m-proofs" class="items"></ul></details>
+  </div></div>
+  <div id="end" class="hidden"><div class="ebox"><span class="kick">Fin de la nuit</span><h2></h2><p class="why"></p><p class="you"></p><ul></ul><button>Retour au salon ▸</button></div></div>
 
   <div id="tuto" class="hidden">
     <div class="t-top"><span class="t-kick">Le maître de jeu</span><h2 id="t-title"></h2><span id="t-num"></span></div>

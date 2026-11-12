@@ -174,6 +174,8 @@ export class Remotes {
       if (r.buf.length > 30) r.buf.shift();
     }
   }
+  /** Joueurs écartés au vote : ils ne sont plus visibles des autres. */
+  setHidden(ids: Set<string>) { for (const [id, r] of this.map) r.body.holder.visible = !ids.has(id); }
   remove(id: string) { const r = this.map.get(id); if (r) { r.body.dispose(); this.map.delete(id); } }
   clear() { for (const r of this.map.values()) r.body.dispose(); this.map.clear(); }
 

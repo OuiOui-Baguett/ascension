@@ -6,7 +6,7 @@ export const TICK_MS = 66;   // ~15 positions par seconde
 export const PLAYER_AVATARS = ['Business_Male_01', 'Business_Male_02', 'Business_Male_03', 'Business_Male_05',
   'Business_Female_01', 'Business_Female_02', 'Female_Party_02'];
 
-export interface Settings { indics: number; duree: 'courte' | 'normale' | 'longue' }
+export interface Settings { indics: number; duree: 'courte' | 'normale' | 'longue'; secret?: boolean }
 export interface PlayerInfo { id: string; name: string; avatar: string; online: boolean; bot: boolean }
 
 export type ClientMsg =
@@ -14,10 +14,10 @@ export type ClientMsg =
   | { t: 'create' }
   | { t: 'join'; code: string }
   | { t: 'name'; name: string }
-  | { t: 'settings'; indics?: number; duree?: Settings['duree'] }
+  | { t: 'settings'; indics?: number; duree?: Settings['duree']; secret?: boolean }
   | { t: 'bot' }
   | { t: 'start' }
-  | { t: 'input'; x: number; z: number; yaw: number; mv: number }
+  | { t: 'input'; x: number; z: number; yaw: number; mv: number; cy?: number }
   | { t: 'leave' }
   | { t: 'ping'; c: number }
   // argent, caisse, jeux
@@ -29,7 +29,11 @@ export type ClientMsg =
   | { t: 'rjoin'; table: number }
   | { t: 'rleave' }
   | { t: 'bet'; kind: BetKind; value: number; amount: number }
-  | { t: 'bclear' };
+  | { t: 'bclear' }
+  | { t: 'meet' }
+  | { t: 'vote'; target: string };
+
+export interface MeetState { ph: 'talk' | 'vote' | 'reveal'; by: string; left: number; voted: string[]; alive: string[]; out?: string; outRole?: 'team' | 'indic'; counts?: [string, number][] }
 
 /** État d'une table de roulette tel que l'envoie le serveur */
 export interface TableState { id: number; ph: 'idle' | 'bets' | 'spin' | 'result'; left: number; bets: [string, BetKind, number, number][]; res: number; hist: number[]; wins: [string, number][] }
@@ -47,6 +51,12 @@ export type ServerMsg =
   | { t: 'slot'; reels: number[]; win: number; jackpot: boolean; money: number }
   | { t: 'jack'; v: number; who?: string; amount?: number }
   | { t: 'rtab'; s: TableState }
+  /** rôle secret, envoyé à chacun séparément ; n = nombre d'indics (absent si secret) */
+  | { t: 'role'; role: 'team' | 'indic'; n?: number }
+  | { t: 'state'; heat: number; paused: number; meetLeft: number; out: string[]; myMeet: boolean; traps: number }
+  | { t: 'proof'; text: string }
+  | { t: 'meeting'; m: MeetState | null }
+  | { t: 'end'; winner: 'team' | 'indic'; reason: string; roles: [string, 'team' | 'indic'][] }
   | { t: 'gone'; id: string }
   | { t: 'left' }
   | { t: 'error'; msg: string }
