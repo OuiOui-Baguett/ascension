@@ -15,6 +15,7 @@ import { LightPool, zoneAt, type LightDef, type Zone } from '../gfx/lights';
 import { Kit, blackjack, roulette, pendant } from './tables';
 import { buildRooms, wallRun } from './rooms';
 import { buildWest } from './rooms2';
+import { Crowd, populateHall, SEATS } from './people';
 import type { World } from './world';
 
 const W = 18, D = 15, H = 8.6;          // demi-largeur, demi-profondeur, hauteur des bas-côtés
@@ -227,6 +228,8 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     slotGeo.chr.push(T(cyl(.025, .025, .62, 0, .31, .95, 8)), T(cyl(.2, .22, .03, 0, .015, .95, 16)));
     slotGeo.seat.push(T(cyl(.21, .2, .1, 0, .68, .95, 18)));
     candlePts.push(new THREE.Vector3(0, 2.62, -.05).applyMatrix4(m));
+    const sp = new THREE.Vector3(0, 0, .95).applyMatrix4(m);
+    SEATS.push({ x: sp.x, z: sp.z, yaw: (face > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI, y: .73 });
     slotGeo.chr.push(T(cyl(.04, .04, .1, 0, 2.55, -.05, 10)));
   };
   // deux îlots dos à dos + une rangée contre le mur est
@@ -429,6 +432,9 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   }
   root.position.set(0, 0, 0); scene.updateMatrixWorld(true);
   for (const u of mirror.users) u.uOn.value = 1;
+  // les gens arrivent après la capture des sondes (elles ne doivent pas les contenir)
+  const crowd = new Crowd(root, camera, quality === 'high');
+  populateHall(crowd, quality === 'low');
   let current: Zone | null = null;
   const setZone = (zn: Zone) => {
     current = zn; pool.apply(zn.lights);

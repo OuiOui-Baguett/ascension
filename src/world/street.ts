@@ -11,6 +11,7 @@ import {
 import { Mirror, wetMaterial } from '../gfx/mirror';
 import { makeRain, makeSplashes, makeSteam, type RainLight } from '../gfx/rain';
 import { bakeStatic } from '../gfx/bake';
+import { Crowd, populateStreet } from './people';
 import type { World } from './world';
 
 export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): World {
@@ -362,6 +363,7 @@ export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): Wor
   scene.add(rain, splash);
 
   bakeStatic(statics, dyn);
+  populateStreet(new Crowd(scene, camera, quality === 'high'));
 
   return {
     scene, camera, hooks: [mirror.update],

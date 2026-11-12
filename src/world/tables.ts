@@ -5,6 +5,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { SEATS, DEALERS } from './people';
 import { box, cyl, mesh, MAT, glowMat, canvasTex, onTick, rnd, glowTex, wheelTex, rouletteFeltTex, blackjackFeltTex } from '../gfx/kit';
 
 /** Regroupe des géométries par matériau, puis les fusionne (un appel de rendu par matériau). */
@@ -129,6 +130,7 @@ export function lightPool(w: number, d: number, x: number, y: number, z: number,
 
 // ---------- chaise de casino (dossier rembourré, pied central) ----------
 export function chair(k: Kit, x: number, z: number, r: number, seatMat: THREE.Material = M.seat) {
+  SEATS.push({ x, z, yaw: r, y: .685 });
   k.add(seatMat,
     T(new RoundedBoxGeometry(.5, .11, .48, 2, .045).translate(0, .63, 0), x, z, r),
     T(new RoundedBoxGeometry(.48, .5, .09, 2, .04).rotateX(-.12).translate(0, .97, -.22), x, z, r));
@@ -193,6 +195,8 @@ export function blackjack(k: Kit, parent: THREE.Object3D, x: number, z: number, 
     const w = new THREE.Vector3(cx, 0, cz).applyAxisAngle(new THREE.Vector3(0, 1, 0), r);
     chair(k, x + w.x, z + w.z, Math.atan2(-cx, -cz) + r);
   }
+  const dp = new THREE.Vector3(0, 0, -.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), r);
+  DEALERS.push({ x: x + dp.x, z: z + dp.z, yaw: r, y: 0 });
   const ext = R + 1.0;
   solids.push([x - ext, z - ext, x + ext, z + ext]);
 }
@@ -243,6 +247,8 @@ export function roulette(k: Kit, parent: THREE.Object3D, x: number, z: number, r
     const w = new THREE.Vector3(cx, 0, cz).applyAxisAngle(new THREE.Vector3(0, 1, 0), r);
     chair(k, x + w.x, z + w.z, cr + r);
   }
+  const rp = new THREE.Vector3(1.0, 0, -1.25).applyAxisAngle(new THREE.Vector3(0, 1, 0), r);
+  DEALERS.push({ x: x + rp.x, z: z + rp.z, yaw: r, y: 0 });
   const hw = r % Math.PI === 0 ? [3.4, 2.1] : [2.1, 3.4];
   solids.push([x - hw[0], z - hw[1], x + hw[0], z + hw[1]]);
 }
