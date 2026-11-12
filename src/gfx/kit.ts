@@ -237,9 +237,9 @@ export function archWindowTex() {
 }
 
 /** Papier peint damassé bordeaux et or. */
-export function damaskTex() {
+export function damaskTex(base = '#3d0a10') {
   return canvasTex(256, 256, (c, w, h) => {
-    c.fillStyle = '#3d0a10'; c.fillRect(0, 0, w, h);
+    c.fillStyle = base; c.fillRect(0, 0, w, h);
     c.strokeStyle = 'rgba(214,160,80,.32)'; c.fillStyle = 'rgba(214,160,80,.16)'; c.lineWidth = 2.5;
     const motif = (x: number, y: number, s: number) => {
       c.save(); c.translate(x, y); c.scale(s, s);
@@ -258,22 +258,22 @@ export function damaskTex() {
 }
 
 /** Moquette de casino : fond pourpre, médaillons or et sarcelle, motif dense. */
-export function carpetTex() {
+export function carpetTex(p = { base: '#4a0b16', a: '#1d4d4f', b: '#6e1020', gold: '#d6a542' }) {
   return canvasTex(512, 512, (c, w, h) => {
-    c.fillStyle = '#4a0b16'; c.fillRect(0, 0, w, h);
+    c.fillStyle = p.base; c.fillRect(0, 0, w, h);
     const n = 4, s = w / n;
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       const cx = x * s + s / 2, cy = y * s + s / 2;
       c.save(); c.translate(cx, cy);
-      c.fillStyle = '#1d4d4f'; c.beginPath(); c.moveTo(0, -s * .46); c.lineTo(s * .46, 0); c.lineTo(0, s * .46); c.lineTo(-s * .46, 0); c.fill();
-      c.fillStyle = '#6e1020'; c.beginPath(); c.moveTo(0, -s * .36); c.lineTo(s * .36, 0); c.lineTo(0, s * .36); c.lineTo(-s * .36, 0); c.fill();
-      c.strokeStyle = '#d6a542'; c.lineWidth = 3;
+      c.fillStyle = p.a; c.beginPath(); c.moveTo(0, -s * .46); c.lineTo(s * .46, 0); c.lineTo(0, s * .46); c.lineTo(-s * .46, 0); c.fill();
+      c.fillStyle = p.b; c.beginPath(); c.moveTo(0, -s * .36); c.lineTo(s * .36, 0); c.lineTo(0, s * .36); c.lineTo(-s * .36, 0); c.fill();
+      c.strokeStyle = p.gold; c.lineWidth = 3;
       for (let k = 0; k < 8; k++) {
         c.rotate(Math.PI / 4);
         c.beginPath(); c.ellipse(0, -s * .2, s * .05, s * .13, 0, 0, 7); c.stroke();
       }
       c.fillStyle = '#e8b851'; c.beginPath(); c.arc(0, 0, s * .07, 0, 7); c.fill();
-      c.fillStyle = '#d6a542';
+      c.fillStyle = p.gold;
       for (const [dx, dy] of [[.5, 0], [-.5, 0], [0, .5], [0, -.5]]) { c.beginPath(); c.arc(dx * s, dy * s, s * .05, 0, 7); c.fill(); }
       c.restore();
     }

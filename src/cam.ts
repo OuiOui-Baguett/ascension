@@ -58,7 +58,7 @@ export class Director {
 
 /** Travelling continu sur une courbe (de la rue jusqu'aux portes du casino). */
 export class Rail {
-  curve: THREE.CatmullRomCurve3; t = 0; active = false; onDone: (() => void) | null = null;
+  curve: THREE.CatmullRomCurve3; t = 0; active = false; progress = 0; hold = false; onDone: (() => void) | null = null;
   constructor(public cam: THREE.PerspectiveCamera, pts: V3[], public dur: number, public lookAt: V3) {
     this.curve = new THREE.CatmullRomCurve3(pts.map(v), false, 'centripetal');
   }
@@ -69,9 +69,10 @@ export class Rail {
   }
   update(dt: number) {
     if (!this.active) return;
-    this.t += dt;
+    if (!this.hold) this.t += dt;
     const k = Math.min(1, this.t / this.dur);
     const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    this.progress = e;
     const p = this.curve.getPointAt(e);
     const ahead = this.curve.getPointAt(Math.min(1, e + .08));
     this.cam.position.copy(p);
@@ -151,8 +152,8 @@ export class Walker {
   }
   private tryMove(dx: number, dz: number, w: World) {
     const r = .32, nx = this.pos.x + dx, nz = this.pos.z + dz;
-    const b = w.bounds;
-    if (b && (nx < b[0] || nx > b[2] || nz < b[1] || nz > b[3])) return;
+    if (w.walk) { if (!w.walk.some(b => nx >= b[0] && nx <= b[2] && nz >= b[1] && nz <= b[3])) return; }
+    else { const b = w.bounds; if (b && (nx < b[0] || nx > b[2] || nz < b[1] || nz > b[3])) return; }
     for (const s of w.solids ?? []) if (nx > s[0] - r && nx < s[2] + r && nz > s[1] - r && nz < s[3] + r) return;
     this.pos.x = nx; this.pos.z = nz;
   }

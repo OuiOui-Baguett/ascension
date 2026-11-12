@@ -20,4 +20,8 @@ export interface World {
   /** Obstacles au sol pour la marche libre : [x0, z0, x1, z1] */
   solids?: [number, number, number, number][];
   bounds?: [number, number, number, number];
+  /** Zones où l'on peut marcher (union de rectangles) [x0, z0, x1, z1] */
+  walk?: [number, number, number, number][];
+  /** Progression du travelling d'entrée (0..1) — portes qui s'ouvrent, etc. */
+  enterTick?: (k: number) => void;
 }

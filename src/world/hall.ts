@@ -11,6 +11,9 @@ import {
 } from '../gfx/kit';
 import { Mirror, wetMaterial } from '../gfx/mirror';
 import { bakeStatic } from '../gfx/bake';
+import { LightPool, zoneAt, type LightDef, type Zone } from '../gfx/lights';
+import { Kit, blackjack, roulette, pendant } from './tables';
+import { buildRooms, wallRun } from './rooms';
 import type { World } from './world';
 
 const W = 18, D = 15, H = 8.6;          // demi-largeur, demi-profondeur, hauteur des bas-côtés
@@ -24,7 +27,7 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   const root = new THREE.Group(); scene.add(root);
   const statics = new THREE.Group(); root.add(statics);
   const dyn: THREE.Object3D[] = [];
-  const solids: [number, number, number, number][] = [];
+  const solids: number[][] = [];
   const mirror = new Mirror(scene, 0, quality === 'high' ? .5 : .36);
 
   root.add(new THREE.HemisphereLight('#7a5638', '#1a0e08', .9));
@@ -39,25 +42,30 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   // moquettes des zones de jeu
   const carpet = new THREE.MeshStandardMaterial({ map: carpetTex(), roughness: 1, color: '#d8c8c8' });
   carpet.map!.repeat.set(1, 1);
-  statics.add(mesh([box(11.6, .025, 25, 11.4, .012, -.5, 4), box(11.6, .025, 19, -11.4, .012, -3.5, 4)], carpet));
+  statics.add(mesh([box(11.6, .025, 25, 11.4, .012, -.5, 4), box(11.6, .025, 27, -11.4, .012, -.5, 4)], carpet));
 
   // ---------- murs ----------
   const wood = pbr('dark_paneled_wood', { color: '#a07058' });
   const damask = new THREE.MeshStandardMaterial({ map: damaskTex(), roughness: .72, color: '#ffffff' });
   const gold = MAT.gold();
-  const Wd: THREE.BufferGeometry[] = [], Dm: THREE.BufferGeometry[] = [], Au: THREE.BufferGeometry[] = [];
-  // lambris bas + tenture
-  Wd.push(box(2 * W, 1.5, .2, 0, .75, -D, 1.6), box(2 * W, 1.5, .2, 0, .75, D, 1.6), box(.2, 1.5, 2 * D, -W, .75, 0, 1.6), box(.2, 1.5, 2 * D, W, .75, 0, 1.6));
-  Dm.push(box(2 * W, H - 1.5, .1, 0, 1.5 + (H - 1.5) / 2, -D - .05, 1.1), box(2 * W, H - 1.5, .1, 0, 1.5 + (H - 1.5) / 2, D + .05, 1.1));
-  Dm.push(box(.1, H - 1.5, 2 * D, -W - .05, 1.5 + (H - 1.5) / 2, 0, 1.1), box(.1, H - 1.5, 2 * D, W + .05, 1.5 + (H - 1.5) / 2, 0, 1.1));
+  const Au: THREE.BufferGeometry[] = [];
+  // lambris bas + tenture, percés : salon privé (mur est) et porte du personnel (mur nord)
+  const wk = new Kit();
+  const holesN: [number, number, number][] = [[11, 1.5, 2.5]], holesE: [number, number, number][] = [[0, 3.2, 3.4]];
+  wallRun(wk, wood, 'x', -D, -W, W, 0, 1.5, .2, 1.6, holesN); wallRun(wk, wood, 'x', D, -W, W, 0, 1.5, .2, 1.6);
+  wallRun(wk, wood, 'z', -W, -D, D, 0, 1.5, .2, 1.6); wallRun(wk, wood, 'z', W, -D, D, 0, 1.5, .2, 1.6, holesE);
+  wallRun(wk, damask, 'x', -D - .05, -W, W, 1.5, H, .1, 1.1, holesN); wallRun(wk, damask, 'x', D + .05, -W, W, 1.5, H, .1, 1.1);
+  wallRun(wk, damask, 'z', -W - .05, -D, D, 1.5, H, .1, 1.1); wallRun(wk, damask, 'z', W + .05, -D, D, 1.5, H, .1, 1.1, holesE);
+  wk.flush(statics);
+  const gap = (a: number, holes: [number, number, number][]) => holes.some(([c, w]) => Math.abs(a - c) < w / 2 + .3);
   for (const [x0, x1, z, along] of [[-W, W, -D + .11, 'x'], [-W, W, D - .11, 'x'], [-D, D, -W + .11, 'z'], [-D, D, W - .11, 'z']] as const) {
-    if (along === 'x') {
-      Au.push(box(x1 - x0, .08, .1, 0, 1.52, z), box(x1 - x0, .14, .12, 0, H - .9, z));
-      for (let x = x0 + 2; x < x1; x += 4) Au.push(box(.35, H - 1.6, .08, x, 1.55 + (H - 1.6) / 2, z));
-    } else {
-      Au.push(box(.1, .08, x1 - x0, z, 1.52, 0), box(.12, .14, x1 - x0, z, H - .9, 0));
-      for (let x = x0 + 2; x < x1; x += 4) Au.push(box(.08, H - 1.6, .35, z, 1.55 + (H - 1.6) / 2, x));
+    const holes = along === 'x' ? (z < 0 ? holesN : []) : (z > 0 ? holesE : []);
+    for (let a = x0; a < x1; a += .5) {
+      if (gap(a + .25, holes)) continue;
+      Au.push(along === 'x' ? box(.5, .08, .1, a + .25, 1.52, z) : box(.1, .08, .5, z, 1.52, a + .25));
     }
+    Au.push(along === 'x' ? box(x1 - x0, .14, .12, 0, H - .9, z) : box(.12, .14, x1 - x0, z, H - .9, 0));
+    for (let a = x0 + 2; a < x1; a += 4) if (!gap(a, holes)) Au.push(along === 'x' ? box(.35, H - 1.6, .08, a, 1.55 + (H - 1.6) / 2, z) : box(.08, H - 1.6, .35, z, 1.55 + (H - 1.6) / 2, a));
   }
   // plafonds à caissons des bas-côtés (bois sombre) et nef voûtée
   const ceilWood = pbr('dark_paneled_wood', { color: '#6a4632' });
@@ -69,11 +77,12 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   }
   {
     const v = new THREE.CylinderGeometry(4.6, 4.6, 2 * D, 32, 1, true, -Math.PI / 2, Math.PI);
-    v.rotateX(Math.PI / 2); v.translate(0, H, 0);
-    const vault = new THREE.Mesh(v, new THREE.MeshStandardMaterial({ color: '#2a1410', roughness: .6, side: THREE.BackSide, metalness: .2 }));
+    v.rotateX(-Math.PI / 2); v.translate(0, H, 0);
+    const vault = new THREE.Mesh(v, new THREE.MeshStandardMaterial({ color: '#3a1c14', roughness: .55, side: THREE.DoubleSide, metalness: .25 }));
     statics.add(vault);
     for (let z = -D + 1.5; z < D; z += 3) {
-      const rib = new THREE.TorusGeometry(4.5, .09, 6, 32, Math.PI); rib.translate(0, H, z); Au.push(rib);
+      const rib = new THREE.TorusGeometry(4.5, .1, 8, 40, Math.PI); rib.translate(0, H, z); Au.push(rib);
+      Au.push(box(.5, .3, .5, -4.45, H + .05, z), box(.5, .3, .5, 4.45, H + .05, z));
     }
   }
   // corniche lumineuse le long de la nef (lumière indirecte chaude)
@@ -88,7 +97,7 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     Au.push(cyl(.6, .6, .35, x, .17, z, 24), cyl(.62, .5, .5, x, H - .4, z, 24), box(1.3, .18, 1.3, x, H - .1, z));
     solids.push([x - .6, z - .6, x + .6, z + .6]);
   }
-  statics.add(mesh(Wd, wood), mesh(Dm, damask), mesh(C, ceilWood), mesh(Cm, colMarble));
+  statics.add(mesh(C, ceilWood), mesh(Cm, colMarble));
 
   // appliques murales : tulipes lumineuses entre les pilastres
   {
@@ -98,21 +107,19 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
       arms.push(box(Math.abs(nx) > 0 ? .3 : .04, .04, Math.abs(nz) > 0 ? .3 : .04, x + nx * .15, 3.2, z + nz * .15), cyl(.07, .07, .3, x + nx * .02, 3.2, z + nz * .02, 10));
       glowPts.push(new THREE.Vector3(x + nx * .3, 3.4, z + nz * .3));
     };
-    for (let x = -W + 4; x < W; x += 4) { if (Math.abs(x) > 5) { add(x, -D + .12, 0, 1); add(x, D - .12, 0, -1); } }
-    for (let z = -D + 4; z < D; z += 4) { add(W - .12, z, -1, 0); if (z > 6 || z < -8) add(-W + .12, z, 1, 0); }
+    for (let x = -W + 4; x < W; x += 4) { if (Math.abs(x) > 5) { if (Math.abs(x - 11) > 1.2) add(x, -D + .12, 0, 1); add(x, D - .12, 0, -1); } }
+    for (let z = -D + 4; z < D; z += 4) { if (Math.abs(z) > 2.5) add(W - .12, z, -1, 0); if (z > 6 || z < -8) add(-W + .12, z, 1, 0); }
     statics.add(mesh(sc, shade, false), mesh(arms, gold));
-    root.add(glows(glowPts, '#ffc27a', 1.1, .55));
+    root.add(glows(glowPts, '#ffc27a', .75, .5));
   }
 
   // ---------- lustres de cristal ----------
   const crystal = glowMat('#ffd6a0', 3.2, { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-  const lights: THREE.PointLight[] = [];
   for (const z of [-9, -3, 3, 9]) {
     const ch = model('Chandelier_03');
     remapMaterials(ch, m => m.name.includes('glass') ? crystal : null);
     ch.scale.setScalar(2.3); ch.position.set(0, H + 1.3 - 2.4, z); root.add(ch); dyn.push(ch);
     const h = halo('#ffcf8a', 1.1, 3.6); h.position.set(0, H + .2 - 2.3 + .9, z); root.add(h);
-    const pl = new THREE.PointLight('#ffbf73', 30, 15, 1.4); pl.position.set(0, H - 2.2, z); root.add(pl); lights.push(pl);
     statics.add(mesh([cyl(.02, .02, 2.2, 0, H + 3.2, z, 6)], gold));
   }
 
@@ -161,7 +168,6 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     vault.add(mesh(bolts.map(g => g), MAT.chrome()));
     vault.position.set(0, 2.05, -D + .35); root.add(vault);
     statics.add(mesh([box(4.6, 4.6, .3, 0, 2.3, -D + .12, 1.5)], new THREE.MeshStandardMaterial({ color: '#2a2b2e', metalness: .6, roughness: .5 })));
-    const vs = new THREE.SpotLight('#ffe1b0', 60, 10, .5, .6, 1.5); vs.position.set(0, 5.6, -D + 4); vs.target = vault; root.add(vs);
     // file d'attente : potelets
     const q: THREE.BufferGeometry[] = [];
     for (const x of [-1.6, 1.6]) for (let i = 0; i < 4; i++) q.push(cyl(.03, .03, .9, x, .45, zc + 1.6 + i * 1.2, 10), new THREE.SphereGeometry(.06, 10, 8).translate(x, .92, zc + 1.6 + i * 1.2), cyl(.15, .17, .04, x, .02, zc + 1.6 + i * 1.2, 14));
@@ -228,55 +234,23 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     addSlot(9.0, z, -1, v); addSlot(9.72, z, 1, (v + 1) % 3);
   }
   solids.push([7.9, -10.6, 10.8, -4.4], [7.9, 2, 10.8, 8.2]);
-  for (let i = 0; i < 12; i++) { const z = -11 + i * 1.0 + (i >= 6 ? 4 : 0); addSlot(W - .55, z, -1, i % 3); }
-  solids.push([W - 2, -12, W, 7.2]);
+  for (let i = 0; i < 15; i++) { const z = i < 8 ? -12.2 + i : 3.2 + (i - 8); addSlot(W - .55, z, -1, i % 3); }
+  solids.push([W - 2, -12.8, W, -4.6], [W - 2, 2.6, W, 9.8]);
   for (let v = 0; v < 3; v++) { statics.add(mesh(slotGeo.cab[v], cabMats[v])); statics.add(mesh(slotGeo.top[v], topMats[v], false)); }
   const scr = mesh(slotGeo.scr, screenMat, false); scr.userData.keep = true; root.add(scr);
   statics.add(mesh(slotGeo.chr, chrome), mesh(slotGeo.blk, black), mesh(slotGeo.deck, deck), mesh(slotGeo.seat, stoolSeat));
   root.add(bulbs(candlePts, '#ff4a3a', { size: .045, speed: .7, period: 2.3, power: 8 }));
-  const slotLight = new THREE.PointLight('#ff5fae', 18, 10, 1.4); slotLight.position.set(12.5, 3, -1); root.add(slotLight);
   // néon « MACHINES À SOUS » au-dessus des îlots
   const slotSign = neonPlane(neonTex('MACHINES  À  SOUS', '112px Monoton', '#ff46b4', 2048, 256, { tube: 6 }), 7, .9, '#ff86d0', 2.6);
-  slotSign.position.set(W - .14, 5.6, -4); slotSign.rotation.y = -Math.PI / 2; root.add(slotSign);
+  slotSign.position.set(W - .14, 5.6, -8.7); slotSign.rotation.y = -Math.PI / 2; root.add(slotSign);
 
-  // ---------- tables de roulette (côté ouest) ----------
-  const feltR = new THREE.MeshStandardMaterial({ map: rouletteFeltTex(), roughness: .95 });
-  const rail = MAT.lacquer('#3a1a0c', .45);
-  const leather = new THREE.MeshStandardMaterial({ color: '#1c0c08', roughness: .5 });
-  const wheels: THREE.Mesh[] = [];
-  const wheelMat = new THREE.MeshStandardMaterial({ map: wheelTex(), roughness: .35, metalness: .2 });
-  for (const z of [-8.5, -2]) {
-    const x = -10.5;
-    statics.add(mesh([new RoundedBoxGeometry(5.0, .82, 2.1, 3, .12).translate(x, .41, z)], rail));
-    const top = new THREE.Mesh(new THREE.PlaneGeometry(3.9, 1.8).rotateX(-Math.PI / 2), feltR); top.position.set(x + .45, .825, z); statics.add(top);
-    statics.add(mesh([box(5.1, .1, .14, x, .86, z - 1.05), box(5.1, .1, .14, x, .86, z + 1.05), box(.14, .1, 2.2, x + 2.52, .86, z), box(.14, .1, 2.2, x - 2.52, .86, z)], leather));
-    // cylindre
-    statics.add(mesh([cyl(.72, .62, .22, x - 1.85, .93, z, 32)], rail));
-    const wh = new THREE.Mesh(new THREE.CircleGeometry(.6, 40).rotateX(-Math.PI / 2), wheelMat); wh.position.set(x - 1.85, 1.045, z); root.add(wh); wheels.push(wh);
-    const tur = mesh([cyl(.02, .12, .18, 0, .09, 0, 12), new THREE.SphereGeometry(.04, 10, 8).translate(0, .2, 0)], gold); tur.position.copy(wh.position); root.add(tur); wheels.push(tur);
-    solids.push([x - 2.8, z - 1.4, x + 2.8, z + 1.4]);
-    // piles de jetons
-    addChips(root, x + .6, z, 14);
-    const sp = new THREE.SpotLight('#ffe0b0', 34, 9, .55, .5, 1.5); sp.position.set(x, 6.5, z); sp.target.position.set(x, 0, z); root.add(sp, sp.target);
-  }
-
-  // ---------- blackjack (près de la nef) ----------
-  const feltB = new THREE.MeshStandardMaterial({ map: blackjackFeltTex(), roughness: .95 });
-  for (const [x, z, r] of [[-10.5, 4.2, 0], [6.6, -1.1, Math.PI / 2], [-7, 9.5, Math.PI]] as const) {
-    const g = new THREE.Group();
-    const top = new THREE.Shape(); top.moveTo(-1.7, 0); top.absarc(0, 0, 1.7, Math.PI, 0, true); top.lineTo(-1.7, 0);
-    const tg = new THREE.ShapeGeometry(top, 32);
-    const p = tg.attributes.position, uv = new Float32Array(p.count * 2);
-    for (let i = 0; i < p.count; i++) { uv[i * 2] = p.getX(i) / 3.4 + .5; uv[i * 2 + 1] = 1 + p.getY(i) / 1.7; }
-    tg.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); tg.rotateX(-Math.PI / 2);
-    const tm = new THREE.Mesh(tg, feltB); tm.position.y = .83; g.add(tm);
-    const ext = new THREE.ExtrudeGeometry(top, { depth: .8, bevelEnabled: false, curveSegments: 32 }); ext.rotateX(-Math.PI / 2); ext.translate(0, .02, 0);
-    g.add(mesh([ext], rail));
-    g.add(mesh([new THREE.TorusGeometry(1.72, .07, 8, 40, Math.PI).rotateX(Math.PI / 2).translate(0, .86, 0), box(3.5, .08, .14, 0, .86, .04)], leather));
-    addChips(g, 0, .32, 6);
-    g.rotation.y = r; g.position.set(x, 0, z); statics.add(g);
-    solids.push([x - 2, z - 2, x + 2, z + 2]);
-  }
+  // ---------- tables de jeu « comme au vrai casino » ----------
+  const tk = new Kit();
+  roulette(tk, root, -9.9, -9.4, 0, solids); roulette(tk, root, -9.9, -3.2, 0, solids);
+  pendant(tk, root, -10.5, -9.4, 2.6, .9, 0, 3.0, H, .79); pendant(tk, root, -10.5, -3.2, 2.6, .9, 0, 3.0, H, .79);
+  blackjack(tk, root, -10.2, 3.0, 0, solids); blackjack(tk, root, -10.2, 9.6, 0, solids); blackjack(tk, root, 6.4, -1.1, -Math.PI / 2, solids);
+  pendant(tk, root, -10.2, 3.5, 1.7, .7, 0, 2.9, H, .83); pendant(tk, root, -10.2, 10.1, 1.7, .7, 0, 2.9, H, .83); pendant(tk, root, 6.9, -1.1, 1.7, .7, Math.PI / 2, 2.9, H, .83);
+  tk.flush(statics);
 
   // ---------- le bar (mur ouest) ----------
   {
@@ -311,7 +285,6 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
       c.scale.setScalar(1.6); c.position.set(bx - .2, H - 1.8, z); root.add(c); dyn.push(c);
       statics.add(mesh([cyl(.015, .015, 1.0, bx - .2, H - .5, z, 6)], gold));
     }
-    const bl = new THREE.PointLight('#ffb468', 26, 11, 1.5); bl.position.set(bx, 4.5, -1); root.add(bl);
     const barSign = neonPlane(neonTex('Le Bar', 'italic 170px "Playfair Display"', '#ffb54a', 1024, 256, { tube: 5 }), 4, 1, '#ffd08a', 2.6);
     barSign.position.set(-W + .14, 5.2, -1); barSign.rotation.y = Math.PI / 2; root.add(barSign);
   }
@@ -349,7 +322,9 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
       for (let i = 0; i < 300; i++) { c.strokeStyle = `rgba(160,180,220,${.08 + rnd() * .12})`; c.beginPath(); const x = rnd() * w, y = rnd() * h; c.moveTo(x, y); c.lineTo(x - 3, y + 14 + rnd() * 20); c.stroke(); }
       for (let i = 0; i < 6; i++) { const rg = c.createRadialGradient(rnd() * w, h * (.5 + rnd() * .3), 1, 0, 0, 0); void rg; c.fillStyle = 'rgba(255,170,80,.5)'; c.beginPath(); c.arc(rnd() * w, h * (.55 + rnd() * .3), 3 + rnd() * 6, 0, 7); c.fill(); }
     });
-    const nm = new THREE.MeshBasicMaterial({ map: nightT, color: new THREE.Color(1.2, 1.2, 1.3) });
+    void nightT;
+    const frost = canvasTex(128, 256, (c, w, h) => { const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#ffe2b0'); g.addColorStop(.6, '#d08a40'); g.addColorStop(1, '#6a3412'); c.fillStyle = g; c.fillRect(0, 0, w, h); for (let i = 0; i < 2000; i++) { c.fillStyle = `rgba(255,255,255,${rnd() * .08})`; c.fillRect(rnd() * w, rnd() * h, 1, 1); } });
+    const nm = new THREE.MeshBasicMaterial({ map: frost, color: new THREE.Color(1.1, 1.0, .9) });
     const fr: THREE.BufferGeometry[] = [];
     for (const x of [-3.4, 0, 3.4]) {
       const d = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 5), nm); d.rotation.y = Math.PI; d.position.set(x, 2.5, D - .02); statics.add(d);
@@ -362,36 +337,76 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   }
 
   // ---------- animations ----------
-  onTick((t, dt) => { for (const w of wheels) w.rotation.y += dt * .9; });
-  onTick((t) => { for (let i = 0; i < lights.length; i++) lights[i].intensity = 30 * (1 + Math.sin(t * 9.1 + i * 2) * Math.sin(t * 5.3 + i) * .02); });
+  // ---------- autres pièces ----------
+  const rooms = buildRooms(root, statics, mirror, solids);
+
+  // ---------- lumières par zone (nombre fixe de lampes) ----------
+  const pool = new LightPool(root, 6, 2);
+  const hallLights: LightDef[] = [
+    ...[-9, -3, 3, 9].map(z => ({ kind: 'point' as const, pos: [0, H - 2.2, z] as [number, number, number], color: '#ffbf73', intensity: 30, distance: 15, decay: 1.4, flicker: .02 })),
+    { kind: 'point', pos: [-W + 2.8, 4.5, -1], color: '#ffb468', intensity: 24, distance: 11 },
+    { kind: 'point', pos: [12.5, 3, -1], color: '#ff5fae', intensity: 16, distance: 10, decay: 1.4 },
+    { kind: 'spot', pos: [0, 5.6, -D + 4], target: [0, 2.05, -D + .35], color: '#ffe1b0', intensity: 60, distance: 10, angle: .5, penumbra: .6 },
+    { kind: 'spot', pos: [-10, 7.6, -1], target: [-10, 0, -1], color: '#ffd8a8', intensity: 70, distance: 14, angle: .85, penumbra: .7 },
+  ];
+  const zones: Zone[] = [
+    { name: 'vip', rects: [[18.4, -7, 30, 7]], lights: rooms.zones.vip },
+    { name: 'back', rects: [[-5, -27, 20, -15.15]], lights: rooms.zones.back },
+    { name: 'hall', rects: [[-W, -D - .2, W + .4, D]], lights: hallLights },
+  ];
 
   bakeStatic(statics, dyn);
 
-  // reflets diffus des lustres et des machines : on capture la salle dans une sonde
+  // reflets diffus : une sonde d'environnement capturée dans chaque zone
   const pm = new THREE.PMREMGenerator(renderer);
-  (floorMat.userData.wet as any).uOn.value = 0;
-  root.position.y = -2.4;
-  scene.updateMatrixWorld(true);
-  const env = pm.fromScene(scene, .03, .1, 60);
-  root.position.y = 0;
-  scene.updateMatrixWorld(true);
-  (floorMat.userData.wet as any).uOn.value = 1;
-  scene.environment = env.texture;
-  scene.environmentIntensity = 1.2;
+  for (const u of mirror.users) u.uOn.value = 0;
+  const probes: Record<string, [number, number, number]> = { hall: [0, 2.4, 0], vip: [24, 1.8, 0], back: [3, 1.6, -21] };
+  for (const zn of zones) {
+    pool.apply(zn.lights);
+    const c = probes[zn.name];
+    root.position.set(-c[0], -c[1], -c[2]); scene.updateMatrixWorld(true);
+    zn.env = pm.fromScene(scene, .03, .1, 60).texture;
+    zn.envIntensity = zn.name === 'hall' ? 1.2 : 1;
+  }
+  root.position.set(0, 0, 0); scene.updateMatrixWorld(true);
+  for (const u of mirror.users) u.uOn.value = 1;
+  let current: Zone | null = null;
+  const setZone = (zn: Zone) => {
+    current = zn; pool.apply(zn.lights);
+    scene.environment = zn.env!; scene.environmentIntensity = zn.envIntensity ?? 1;
+  };
+  setZone(zones[2]);
+  onTick((t) => {
+    const p = camera.position, zn = zoneAt(zones, p.x, p.z) ?? zones[2];
+    if (zn !== current) setZone(zn);
+    pool.tick(t);
+  });
+  // flux vidéo de la salle de surveillance : seulement quand on peut les voir
+  const feedZone = [zones[2], zones[2], zones[2], zones[0]];
+  const feedsHook = (r: THREE.WebGLRenderer) => {
+    if (current?.name !== 'back' || camera.position.x < 9) return;
+    rooms.feedsHook(r, (i) => {
+      const zn = feedZone[i]; pool.apply(zn.lights); scene.environment = zn.env!;
+      for (const u of mirror.users) u.uOn.value = 0;
+    }, () => { setZone(current!); for (const u of mirror.users) u.uOn.value = 1; });
+  };
 
   return {
-    scene, camera, hooks: [mirror.update], mirror,
+    scene, camera, hooks: [feedsHook, mirror.update], mirror,
     look: { tone: 'agx', exposure: 1.0, bloom: { intensity: 1.05, threshold: .85, smoothing: .25, radius: .75 },
       ao: { radius: 1.4, intensity: 2.2, falloff: 1, color: '#0a0503' }, saturation: .14, contrast: .08, vignette: .45, grain: .04 },
     shots: [
-      { from: [0, 6.2, 14], to: [0, 3.4, 4], look: [0, 2.4, -14], look2: [0, 2.2, -14], fov: 46, dur: 9, focus: 18, text: '23 h 47 — Grand Casino. Trois heures avant la fermeture.' },
-      { from: [12.5, 1.5, 9.5], to: [11.8, 1.6, -9], look: [9.4, 1.6, 0], look2: [9.4, 1.8, -9], fov: 40, dur: 7, focus: 3, text: 'Douze caméras. Six vigiles. Une seule caisse.' },
-      { from: [-2.6, 1.3, -6], to: [-1.0, 1.7, -9.4], look: [0, 1.8, -14], look2: [0, 2.1, -15], fov: 38, dur: 7, focus: 5, text: 'Et parmi vous… quelqu\'un a déjà parlé aux flics.' },
+      { from: [0, 5.6, 13.8], to: [0, 2.5, 3], look: [0, 3.0, -14], look2: [0, 2.1, -14], fov: 48, dur: 8, focus: 16, text: '23 h 47 — Grand Casino. Trois heures avant la fermeture.' },
+      { from: [-6.3, 1.2, 7.2], to: [-6.7, 1.3, -.6], look: [-10.4, .95, 3.4], look2: [-10.2, .9, -6.8], fov: 40, dur: 7, focus: 4.5, text: 'Ce soir, des millions changent de mains sous les lustres.' },
+      { from: [19.3, 1.55, 2.8], to: [21.2, 1.35, 1.5], look: [23.6, .9, 0], look2: [24.2, .85, -.2], fov: 42, dur: 6, focus: 3.5, text: 'Au salon privé, les gros joueurs misent sans compter.' },
+      { from: [14.6, 1.55, -19.6], to: [16.8, 1.45, -21.2], look: [20, 1.9, -21.5], look2: [20, 1.9, -21.5], fov: 44, dur: 6, focus: 3.4, text: 'Douze caméras. Six vigiles. Aucun angle mort… en théorie.' },
+      { from: [8.2, 1.5, -21], to: [3.4, 1.45, -21.2], look: [0, 1.0, -21.4], look2: [-1.4, .9, -21.6], fov: 46, dur: 6, focus: 3.4, text: 'Et au bout du couloir : la chambre forte.' },
+      { from: [-2.6, 1.3, -5.5], to: [-1.0, 1.65, -9], look: [0, 1.8, -14], look2: [0, 2.1, -15], fov: 38, dur: 7, focus: 5, text: 'Parmi vous, quelqu\'un a déjà parlé aux flics.' },
     ],
     focus: 14,
     tick: () => {},
     spawn: { pos: [0, 1.65, 12.4], yaw: 0 },
-    solids, bounds: [-W + .6, -D + .6, W - .6, D - .6],
+    solids: solids as [number, number, number, number][], walk: [[-W + .6, -D + .6, W - .6, D - .6], ...rooms.walk],
   };
 }
 

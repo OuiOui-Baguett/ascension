@@ -96,6 +96,7 @@ function showTitle() {
   $('#skip').classList.add('hidden');
   $('#sub').textContent = '';
   walker.active = false;
+  street.enterTick?.(0);
   setDof(getQuality() !== 'low');
   setMode('street');
   const fixed = params.get('shot');
@@ -112,7 +113,7 @@ async function enterCasino() {
   $('#title').classList.add('hidden');
   document.body.classList.add('cine');
   director.stop();
-  rail = new Rail(world.camera, street.enter!, 6.5, [0, 2.6, -12]);
+  rail = new Rail(world.camera, street.enter!, 8.5, [0, 3.4, -21]);
   rail.start(async () => {
     await fade(1, .45);
     await ensureHall();
@@ -203,7 +204,8 @@ function frame(now: number) {
     rail.update(dt);
     walker.update(dt, world);
     if (state === 'title') focusDof(director.focus, 14);
-    else if (state === 'enter') focusDof(Math.max(2, world.camera.position.distanceTo(new THREE.Vector3(0, 2.6, -11))), 6);
+    else if (state === 'cine') focusDof(director.focus, Math.max(3, director.focus * .7));
+    else if (state === 'enter') { street.enterTick?.(rail.progress); focusDof(Math.max(2, world.camera.position.distanceTo(new THREE.Vector3(0, 2.4, -21))), 7); }
     renderer.info.reset();
     render(dt);
     watchPerf(now);
@@ -215,4 +217,17 @@ requestAnimationFrame(frame);
 (window as any).__gfx = () => ({ q: getQuality(), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, state });
 (window as any).__walk = (x: number, z: number, yaw: number, pitch = 0) => { walker.pos.set(x, 1.65, z); walker.yaw = yaw; walker.pitch = pitch; };
 (window as any).__enter = () => enterCasino();
+(window as any).__railAt = (k: number) => {
+  if (world !== street) switchTo(street);
+  director.stop(); state = 'enter'; $('#title').classList.add('hidden'); document.body.classList.add('cine');
+  rail = new Rail(world.camera, street.enter!, 8.5, [0, 3.4, -21]); rail.start(() => {}); rail.hold = true;
+  const target = k; let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; const e = m < .5 ? 2 * m * m : 1 - Math.pow(-2 * m + 2, 2) / 2; if (e < target) lo = m; else hi = m; }
+  rail.t = lo * 9; rail.update(0);
+};
+(window as any).__hshot = async (i: number) => {
+  await ensureHall(); if (world !== hall) switchTo(hall!);
+  state = 'cine'; walker.active = false; $('#hud').classList.add('hidden'); document.body.classList.add('cine');
+  const s = hall!.shots[i]; director.play([{ ...s, from: s.to, dur: 9999 }], true); setDof(getQuality() !== 'low');
+};
 start();

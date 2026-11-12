@@ -4,9 +4,9 @@
 // ============================================================
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { model, remapMaterials, pbr, getHDR } from '../gfx/assets';
+import { model, remapMaterials, pbr, getHDR, texRaw } from '../gfx/assets';
 import {
-  box, cyl, mesh, MAT, glowMat, neonTex, neonPlane, halo, bulbs, windowsTex, archWindowTex, canvasTex, onTick, U, rnd,
+  box, cyl, mesh, MAT, glowMat, neonTex, neonPlane, halo, bulbs, windowsTex, archWindowTex, canvasTex, onTick, U, rnd, damaskTex, plaqueTex,
 } from '../gfx/kit';
 import { Mirror, wetMaterial } from '../gfx/mirror';
 import { makeRain, makeSplashes, makeSteam, type RainLight } from '../gfx/rain';
@@ -51,7 +51,7 @@ export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): Wor
   const gold = MAT.gold();
   const S: THREE.BufferGeometry[] = [], G: THREE.BufferGeometry[] = [], Au: THREE.BufferGeometry[] = [];
   // corps principal
-  S.push(box(48, 18, 1.2, 0, 9, -13.6, 2.5));
+  S.push(box(16.5, 18, 1.2, -15.75, 9, -13.6, 2.5), box(16.5, 18, 1.2, 15.75, 9, -13.6, 2.5), box(15, 11.8, 1.2, 0, 12.1, -13.6, 2.5));
   G.push(box(48.2, 1.3, .5, 0, .65, -12.85, 1.5));
   for (const y of [6.7, 12.7]) { S.push(box(48.6, .45, .7, 0, y, -12.75, 1.5)); Au.push(box(48.6, .07, .72, 0, y - .3, -12.74)); }
   S.push(box(49.2, .9, 1.5, 0, 18.1, -12.85, 1.5)); Au.push(box(49.2, .08, 1.52, 0, 17.6, -12.84));
@@ -72,8 +72,8 @@ export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): Wor
   }
   const wins = mesh(winGeos, winMat, false);
   // pavillon central
-  S.push(box(17, 22, 2.2, 0, 11, -12.1, 2.5));
-  G.push(box(17.2, 1.3, .3, 0, .65, -10.9, 1.5));
+  S.push(box(17, 16.8, 2.2, 0, 13.6, -12.1, 2.5));
+  for (const [a, b] of [[-8.5, -6.2], [-3.0, -1.6], [1.6, 3.0], [6.2, 8.5]]) { S.push(box(b - a, 5.2, 2.2, (a + b) / 2, 2.6, -12.1, 2.5)); G.push(box(b - a + .1, 1.3, .3, (a + b) / 2, .65, -10.9, 1.5)); }
   S.push(box(17.8, 1, 1, 0, 21.9, -10.9, 1.5)); Au.push(box(17.8, .1, 1.02, 0, 21.35, -10.9));
   S.push(box(17.6, .55, .7, 0, 7.6, -10.8, 1.5)); Au.push(box(17.6, .08, .72, 0, 7.28, -10.8));
   // fronton triangulaire
@@ -96,28 +96,89 @@ export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): Wor
   S.push(box(5.8, .3, .5, 0, 8.4, -10.85, 1), box(.3, 8.6, .4, -2.75, 12.8, -10.9, 1), box(.3, 8.6, .4, 2.75, 12.8, -10.9, 1));
   statics.add(bigWin, ...smallWins);
 
-  // portes d'entrée : intérieur doré derrière des vitres à croisillons laiton
-  const doorT = canvasTex(256, 512, (c, w, h) => {
-    const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#f6c98a'); g.addColorStop(.55, '#b8662a'); g.addColorStop(1, '#3a160a');
-    c.fillStyle = g; c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 4; i++) { const x = w * (.15 + .7 * rnd()), y = h * (.08 + .12 * rnd()); const rg = c.createRadialGradient(x, y, 2, x, y, w * .35); rg.addColorStop(0, 'rgba(255,248,225,.95)'); rg.addColorStop(1, 'rgba(255,200,120,0)'); c.fillStyle = rg; c.fillRect(0, 0, w, h); }
-    // silhouettes de joueurs à contre-jour
-    for (let i = 0; i < 7; i++) {
-      const s = .6 + rnd() * .5, x = w * rnd(), y = h * (.62 + rnd() * .1);
-      c.fillStyle = `rgba(20,8,4,${.55 + rnd() * .35})`;
-      c.beginPath(); c.arc(x, y - 92 * s, 13 * s, 0, 7); c.fill();
-      c.beginPath(); c.moveTo(x - 26 * s, y - 70 * s); c.lineTo(x + 26 * s, y - 70 * s); c.lineTo(x + 20 * s, h); c.lineTo(x - 20 * s, h); c.fill();
-    }
-  });
-  const doorMat = new THREE.MeshBasicMaterial({ map: doorT, color: new THREE.Color(1.15, 1.0, .85) });
+  // portes vitrées (battants à charnières, ceux du centre s'ouvrent pendant la cinématique)
   const brass = MAT.brass();
   const Br: THREE.BufferGeometry[] = [];
+  const glassM = new THREE.MeshStandardMaterial({ color: '#10141a', metalness: .9, roughness: .05, transparent: true, opacity: .3, depthWrite: false });
+  const leaves: THREE.Group[] = [];
   for (const x of [-4.6, 0, 4.6]) {
-    const d = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 5.2), doorMat); d.position.set(x, 2.6, -10.99); statics.add(d);
-    for (const dx of [-1.6, -.53, .53, 1.6]) Br.push(box(.07, 5.2, .08, x + dx, 2.6, -10.95));
-    for (const y of [.15, 1.0, 2.6, 5.15]) Br.push(box(3.24, .07, .08, x, y, -10.95));
-    Br.push(box(.04, .7, .06, x - .2, 1.6, -10.9), box(.04, .7, .06, x + .2, 1.6, -10.9));   // poignées
+    for (const y of [5.15]) Br.push(box(3.3, .1, .14, x, y, -11.55));
+    for (const s2 of [-1, 1]) {
+      const pivot = new THREE.Group(); pivot.position.set(x + s2 * 1.6, 0, -11.55);
+      const lw = 1.58, dir = -s2;
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(lw - .1, 5.0), glassM); glass.position.set(dir * lw / 2, 2.6, 0); pivot.add(glass);
+      const fr = [box(.07, 5.1, .07, dir * .04, 2.55, 0), box(.07, 5.1, .07, dir * (lw - .04), 2.55, 0), box(lw, .09, .07, dir * lw / 2, .06, 0), box(lw, .07, .07, dir * lw / 2, 5.08, 0),
+        box(lw, .05, .06, dir * lw / 2, 1.0, 0), cyl(.022, .022, .9, dir * (lw - .22), 1.25, .07, 8)];
+      pivot.add(mesh(fr, brass));
+      scene.add(pivot);
+      if (x === 0) leaves.push(pivot);
+    }
   }
+  const enterTick = (k: number) => {
+    const o = Math.min(1, Math.max(0, (k - .5) / .22)), e = o * o * (3 - 2 * o);
+    leaves.forEach((l, i) => { l.rotation.y = (i === 0 ? 1 : -1) * 1.75 * e; });
+  };
+
+  // ---------- le foyer derrière les portes : vraie profondeur, vrai volume ----------
+  {
+    const fx0 = -7.5, fx1 = 7.5, fz0 = -21, fz1 = -13.2, fy = .15, FH = 6.2;
+    const fk: [THREE.BufferGeometry, THREE.Material][] = [];
+    const marbleF = wetMaterial(pbr('marble_01', { color: '#d9ccb6', normalScale: .25 }), mirror, { damp: .8, blur: 1.2, distort: .01, darken: 0, ripples: 0, f0: .07, checker: texRaw('granite_tile', 'diff') });
+    marbleF.roughness = .5;
+    const fl = new THREE.Mesh(box(fx1 - fx0, .1, fz1 - fz0, 0, fy - .05, (fz0 + fz1) / 2, 2.4), marbleF); scene.add(fl); mirror.hidden.push(fl);
+    const woodF = pbr('dark_paneled_wood', { color: '#a07058' });
+    const damF = new THREE.MeshStandardMaterial({ map: damaskTex(), roughness: .72 });
+    for (const [a, b, c2, axis] of [[fx0, fz0, fz1, 'z'], [fx1, fz0, fz1, 'z']] as const) {
+      fk.push([box(.2, 1.3, c2 - b, a, fy + .65, (b + c2) / 2, 1.6), woodF], [box(.1, FH - 1.3, c2 - b, a + (a < 0 ? -.05 : .05), fy + 1.3 + (FH - 1.3) / 2, (b + c2) / 2, 1.1), damF]);
+      void axis;
+    }
+    fk.push([box(fx1 - fx0, 1.3, .2, 0, fy + .65, fz0, 1.6), woodF], [box(fx1 - fx0, FH - 1.3, .1, 0, fy + 1.3 + (FH - 1.3) / 2, fz0 - .05, 1.1), damF]);
+    fk.push([box(fx1 - fx0, .2, fz1 - fz0, 0, fy + FH + .1, (fz0 + fz1) / 2, 2), pbr('dark_paneled_wood', { color: '#5a3a28' })]);
+    for (let x = fx0 + 2.5; x < fx1; x += 2.5) fk.push([box(.12, .18, fz1 - fz0, x, fy + FH - .09, (fz0 + fz1) / 2), gold]);
+    for (let z = fz0 + 2.6; z < fz1; z += 2.6) fk.push([box(fx1 - fx0, .18, .12, 0, fy + FH - .09, z), gold]);
+    fk.push([box(fx1 - fx0, .08, .1, 0, fy + 1.32, fz0 + .11), gold], [box(.1, .08, fz1 - fz0, fx0 + .11, fy + 1.32, (fz0 + fz1) / 2), gold], [box(.1, .08, fz1 - fz0, fx1 - .11, fy + 1.32, (fz0 + fz1) / 2), gold]);
+    // portes intérieures vers la salle de jeux : verre dépoli doré, très lumineux
+    const frostT = canvasTex(256, 512, (c, w, h) => {
+      const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#f6dcb0'); g.addColorStop(.55, '#d8954e'); g.addColorStop(1, '#7a3a16'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+      // silhouettes floues de joueurs derrière le verre dépoli
+      c.filter = 'blur(6px)';
+      for (let i = 0; i < 5; i++) { const s3 = .7 + rnd() * .5, x = w * rnd(), y = h * (.7 + rnd() * .08); c.fillStyle = `rgba(40,16,6,${.35 + rnd() * .25})`; c.beginPath(); c.arc(x, y - 150 * s3, 20 * s3, 0, 7); c.fill(); c.fillRect(x - 38 * s3, y - 125 * s3, 76 * s3, h); }
+      c.filter = 'none';
+      // verre gravé art déco
+      c.strokeStyle = 'rgba(255,240,210,.55)'; c.lineWidth = 2;
+      for (let i = 0; i < 9; i++) { c.beginPath(); c.moveTo(w / 2, h * .12); c.lineTo(w * (i / 8), h * .45); c.stroke(); }
+      c.beginPath(); c.arc(w / 2, h * .12, 40, 0, Math.PI); c.stroke(); c.beginPath(); c.arc(w / 2, h * .12, 60, 0, Math.PI); c.stroke();
+      for (let i = 0; i < 2600; i++) { c.fillStyle = `rgba(255,255,255,${rnd() * .07})`; c.fillRect(rnd() * w, rnd() * h, 1, 1); }
+    });
+    const frost = new THREE.MeshBasicMaterial({ map: frostT, color: new THREE.Color(1.05, .95, .85) });
+    for (const x of [-3.6, 0, 3.6]) {
+      const d = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 4.2), frost); d.position.set(x, fy + 2.1, fz0 + .12); scene.add(d);
+      for (const dx of [-1.4, 0, 1.4]) fk.push([box(.08, 4.2, .1, x + dx, fy + 2.1, fz0 + .16), brass]);
+      for (const y of [.05, 2.1, 4.2]) fk.push([box(2.8, .08, .1, x, fy + y, fz0 + .16), brass]);
+    }
+    const pl = plaqueTex('SALLE DE JEUX', 'Tenue correcte exigée');
+    const plaque = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshStandardMaterial({ map: pl, emissive: '#ffffff', emissiveMap: pl, emissiveIntensity: .6, roughness: .35, metalness: .3 }));
+    plaque.position.set(0, fy + 5, fz0 + .14); scene.add(plaque);
+    // vestiaire à gauche
+    const vw = pbr('dark_paneled_wood', { color: '#8a5a40' });
+    fk.push([box(.7, 1.1, 4.2, fx0 + 1.5, fy + .55, -17.4, 1.2), vw], [box(.85, .07, 4.4, fx0 + 1.5, fy + 1.13, -17.4, 1.5), pbr('granite_tile', { color: '#2d2b2a' })]);
+    for (let i = 0; i < 9; i++) fk.push([box(.04, .9, .5, fx0 + .35, fy + 1.9, -19.2 + i * .45), MAT.matte(['#1a1a1e', '#3a2a20', '#2a2e3a'][i % 3], .9)]);
+    fk.push([cyl(.02, .02, 4.4, 0, 0, 0, 6).rotateX(Math.PI / 2).translate(fx0 + .35, fy + 2.4, -17.4), brass]);
+    fk.push([new THREE.SphereGeometry(.05, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(fx0 + 1.5, fy + 1.17, -16), brass]);
+    const vt = canvasTex(512, 128, (c, w, h) => { c.fillStyle = '#140a06'; c.fillRect(0, 0, w, h); c.strokeStyle = '#c99a45'; c.lineWidth = 4; c.strokeRect(8, 8, w - 16, h - 16); c.fillStyle = '#e6c27a'; c.font = '64px "Playfair Display"'; c.textAlign = 'center'; (c as any).letterSpacing = '10px'; c.fillText('VESTIAIRE', w / 2, 86); });
+    const vs = new THREE.Mesh(new THREE.PlaneGeometry(2, .5), new THREE.MeshStandardMaterial({ map: vt, emissive: '#fff', emissiveMap: vt, emissiveIntensity: .4 }));
+    vs.rotation.y = Math.PI / 2; vs.position.set(fx0 + .14, fy + 3.3, -17.4); scene.add(vs);
+    // lustre, plantes, tapis rouge jusqu'aux portes intérieures
+    const ch = model('Chandelier_03'); remapMaterials(ch, m => m.name.includes('glass') ? glowMat('#ffd6a0', 3.2, { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }) : null);
+    ch.scale.setScalar(2.1); ch.position.set(0, fy + FH + 1.25 - 2.2 - .3, -17.1); scene.add(ch);
+    const hh = halo('#ffcf8a', 1.1, 3.4); hh.position.set(0, fy + FH - 1.5, -17.1); scene.add(hh);
+    for (const [x, z] of [[fx1 - .7, -20.3], [fx1 - .7, -14], [fx0 + .7, -14]] as const) { const p = model('potted_plant_04'); p.scale.setScalar(4); p.position.set(x, fy, z); statics.add(p); }
+    fk.push([box(3.2, .03, 7.6, 0, fy + .015, -17.1, 1), pbr('velour_velvet', { color: '#b0101c' })]);
+    const groups = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    for (const [g, m] of fk) { if (!groups.has(m)) groups.set(m, []); groups.get(m)!.push(g); }
+    for (const [m, gs] of groups) statics.add(mesh(gs, m));
+  }
+
   statics.add(mesh(S, stone), mesh(G, granite), mesh(Au, gold), mesh(Br, brass), wins);
 
   // ---------- marquise ----------
@@ -141,7 +202,7 @@ export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): Wor
   spot.castShadow = quality === 'high';
   spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -.0004; spot.shadow.camera.near = .5;
   scene.add(spot, spot.target);
-  const doorLight = new THREE.PointLight('#ffb460', 30, 11, 1.6); doorLight.position.set(0, 3, -9.6); scene.add(doorLight);
+  const doorLight = new THREE.PointLight('#ffb460', 42, 17, 1.5); doorLight.position.set(0, 4.4, -16.8); scene.add(doorLight);
   rainLights.push({ pos: new THREE.Vector3(0, 5.5, -7), color: new THREE.Color('#ffb066'), radius: 7 });
 
   // néon CASINO sur le fronton + grosses lettres qui grésillent
@@ -312,7 +373,8 @@ export function buildStreet(renderer: THREE.WebGLRenderer, quality: string): Wor
       { from: [-9, .55, 3.2], to: [-6.5, .7, 1.2], look: [0, 4.2, -11], look2: [1, 5, -11], fov: 36, dur: 14, focus: 13 },
       { from: [3, 9, 8], to: [1.5, 7.5, 5], look: [0, 6, -11], look2: [0, 5, -11], fov: 44, dur: 14, focus: 16 },
     ],
-    enter: [[5.2, 1.5, 9.0], [2.5, 1.6, 2], [.4, 1.65, -6], [0, 1.7, -10.3]],
+    enter: [[5.2, 1.5, 9.0], [2.5, 1.6, 2], [.4, 1.65, -6], [0, 1.7, -10.2], [0, 1.75, -14.2], [0, 1.85, -17.2]],
+    enterTick,
     focus: 20,
     tick: () => { /* animé via onTick */ },
     mirror,

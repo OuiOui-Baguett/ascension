@@ -47,6 +47,8 @@ export function makeRain(count: number, lights: RainLight[]) {
         for (int i = 0; i < NL; i++) { float d = distance(wp, uLP[i]); col += uLC[i] * pow(max(0.0, 1.0 - d / uLR[i]), 2.0) * 2.2; }
         vCol = col;
         vFade = smoothstep(.5, 2.5, -c.z) * (1.0 - smoothstep(12.0, 15.0, -c.z));
+        float dry = step(wp.z, -11.2) * step(abs(wp.x), 26.0) + step(abs(wp.x), 8.7) * step(wp.z, -5.9) * step(wp.y, 5.5);
+        vFade *= 1.0 - min(dry, 1.0);
       }`,
     fragmentShader: /* glsl */`
       uniform float uOpacity; varying vec2 vUv; varying vec3 vCol; varying float vFade;
@@ -84,7 +86,8 @@ export function makeSplashes(count: number, y: number, area: { x0: number; x1: n
         float cyc = floor(t); vT = fract(t);
         float s = cyc * 1.37 + aPh * 91.0;
         vec3 wp = vec3(mix(uA.x, uA.y, h(s)), uY, mix(uA.z, uA.w, h(s + 3.1)));
-        wp.xz += position.xz * (.05 + vT * .22);
+        float dry = step(abs(wp.x), 8.7) * step(wp.z, -5.9);
+        wp.xz += position.xz * (.05 + vT * .22) * (1.0 - dry);
         vUv = uv;
         gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
       }`,
