@@ -68,7 +68,41 @@
     <div id="help">Pouce gauche pour marcher (à fond pour courir) · glisse à droite pour tourner la caméra</div>
     <div id="toast"></div>
     <div id="joy"><i></i></div>
+    <div id="play" class="hidden">
+      <div id="p-top"><span id="p-clock">23 h 47</span><b id="p-money">500 €</b><button id="p-bag">Sac <small></small></button></div>
+      <button id="p-act" class="act hidden">Caisse<small>acheter</small></button>
+      <button id="p-give" class="act sub hidden">Donner<small>à …</small></button>
+    </div>
   </div>
+
+  <section id="shop" class="panel hidden">
+    <header><h2>La caisse</h2><span class="pm">Ton argent : <b id="shop-money"></b></span><button class="x">Fermer</button></header>
+    <ul id="shop-list" class="items"></ul>
+    <p class="foot">Tout s'achète ici, à la vue de tous. Les objets serviront pendant le casse : ils ne font encore rien dans cette version.</p>
+  </section>
+  <section id="bag" class="panel hidden">
+    <header><h2>Ton sac</h2><button class="x">Fermer</button></header>
+    <ul id="bag-list" class="items"></ul>
+  </section>
+  <section id="give" class="panel small hidden">
+    <header><h2>Donner à <span id="give-who"></span></h2><button class="x">Annuler</button></header>
+    <div class="gives"><button data-g="20">20 €</button><button data-g="50">50 €</button><button data-g="100">100 €</button><button data-g="250">250 €</button></div>
+  </section>
+  <section id="roul" class="panel game hidden">
+    <header><h2 id="r-phase"></h2><span id="r-time"></span><button class="x">Quitter</button></header>
+    <div id="r-msg"></div>
+    <div id="r-hist" class="hist"></div>
+    <div class="felt"><div id="r-grid"></div><div id="r-out"></div></div>
+    <div class="rbar"><div id="r-chips" class="chips"></div><button id="r-clear">Annuler mes mises</button></div>
+    <div class="rinfo"><span id="r-mine"></span><span id="r-others"></span><b id="r-money"></b></div>
+  </section>
+  <section id="slot" class="panel game small hidden">
+    <header><h2>Jackpot <b id="s-jack"></b></h2><button class="x">Se lever</button></header>
+    <div class="sline"><div id="s-bets" class="chips"></div><b id="s-money"></b></div>
+    <button id="s-spin">Lancer</button>
+    <div id="s-msg"></div>
+    <details><summary>Table des gains</summary><div id="s-pays"></div></details>
+  </section>
 
   <div id="fade"></div>
   <div id="wait" class="hidden">…</div>

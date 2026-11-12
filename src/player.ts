@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { getGLTF } from './gfx/assets';
 import type { PlayerInfo } from '../shared/protocol';
+import { SLOT_LIST, slotSeat } from '../shared/layout';
 
 /** Surnoms des personnages tirés au sort. */
 export const CHARACTER: Record<string, string> = {
@@ -46,15 +47,18 @@ export class Body {
   private acts: THREE.AnimationAction[] = [];
   private nWalk = 1.4; private nRun = 3.2;
   private tag: THREE.Sprite | null = null;
+  private root: THREE.Object3D;
+  seated = false;
+  private fx: { m: THREE.Mesh; t: number } | null = null;
 
   constructor(public avatar: string, name: string | null, parent: THREE.Object3D) {
     const g = getGLTF(avatar)!;
     const root = SkeletonUtils.clone(g.scene);
     root.traverse(n => { const m = n as THREE.Mesh; if (m.isMesh) { m.frustumCulled = false; m.layers.set(1); } });
-    this.holder.add(root);
+    this.holder.add(root); this.root = root;
     this.mixer = new THREE.AnimationMixer(root);
     const f = isF(avatar) ? 'f' : 'm';
-    const ids = [`${f}_idle_neutral_01`, `${f}_walk_neutral_01`, `${f}_run_slow_01`];
+    const ids = [`${f}_idle_neutral_01`, `${f}_walk_neutral_01`, `${f}_run_slow_01`, `${f}_sit_table_idle_neutral_01`];
     this.nWalk = measure(avatar, ids[1], .62, 1.0, 1.9, 1.4);
     this.nRun = measure(avatar, ids[2], .4, 2.4, 4.8, 3.2);
     for (const id of ids) {
@@ -81,8 +85,41 @@ export class Body {
     this.holder.add(this.tag);
   }
 
+  /** S'asseoir sur un tabouret : le bassin est calé au-dessus de l'assise. */
+  sit(x: number, z: number, yaw: number, seatY = .73) {
+    const [a0, a1, a2, a3] = this.acts;
+    if (!a3) return;
+    a0?.setEffectiveWeight(0); a1?.setEffectiveWeight(0); a2?.setEffectiveWeight(0); a3.setEffectiveWeight(1);
+    this.mixer.update(0);
+    const h = this.holder;
+    h.position.set(0, 0, 0); h.rotation.y = yaw; h.updateMatrixWorld(true);
+    const pelvis = this.root.getObjectByName('Bip01_Pelvis') ?? this.root.getObjectByName('Bip01');
+    const p = new THREE.Vector3(); pelvis?.getWorldPosition(p);
+    const back = new THREE.Vector3(0, 0, -.06).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    h.position.set(x - p.x + back.x, seatY - p.y + .11, z - p.z + back.z);
+    this.seated = true; this.speed = 0;
+  }
+  stand() {
+    if (!this.seated) return;
+    this.seated = false; this.acts[3]?.setEffectiveWeight(0); this.holder.position.y = 0;
+  }
+  /** Enveloppe remise par la caissière (blanche : achat normal ; rouge : achat piégé). */
+  envelope(color: 'white' | 'red') {
+    if (this.fx) this.holder.remove(this.fx.m);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(.22, .13, .012), new THREE.MeshBasicMaterial({ color: color === 'red' ? '#d0121c' : '#f4efe4', toneMapped: false, transparent: true }));
+    m.position.set(.18, 1.12, .32); m.rotation.set(-.4, .2, 0); m.layers.set(1);
+    this.holder.add(m); this.fx = { m, t: 0 };
+  }
+
   /** v en m/s (vitesse réelle au sol) */
   animate(v: number, dt: number) {
+    if (this.fx) {
+      const f = this.fx; f.t += dt;
+      f.m.position.y = 1.12 + Math.min(1, f.t / 1.4) * .12;
+      (f.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, Math.min(1, 3 - f.t));
+      if (f.t > 3) { this.holder.remove(f.m); f.m.geometry.dispose(); this.fx = null; }
+    }
+    if (this.seated) { this.mixer.update(dt); return; }
     this.speed += (v - this.speed) * Math.min(1, dt * 10);
     const s = this.speed;
     const idle = Math.max(0, Math.min(1, 1 - s / .55));
@@ -102,34 +139,38 @@ export class Body {
   }
 }
 
-interface Sample { t: number; x: number; z: number; yaw: number }
+interface Sample { t: number; x: number; z: number; yaw: number; seat: number }
 const DELAY = 120; // ms de retard volontaire pour interpoler en douceur
 
 /** Les autres joueurs, tels que le serveur les voit. */
 export class Remotes {
-  map = new Map<string, { body: Body; buf: Sample[]; last: THREE.Vector3 }>();
+  map = new Map<string, { body: Body; buf: Sample[]; last: THREE.Vector3; seat: number }>();
+  /** Machines occupées par les autres joueurs */
+  busySlots = new Set<number>();
   constructor(public parent: THREE.Object3D) {}
 
   sync(players: PlayerInfo[], me: string) {
     for (const p of players) {
       if (p.id === me || !p.avatar) continue;
       let r = this.map.get(p.id);
-      if (!r) { r = { body: new Body(p.avatar, p.name, this.parent), buf: [], last: new THREE.Vector3() }; this.map.set(p.id, r); }
+      if (!r) { r = { body: new Body(p.avatar, p.name, this.parent), buf: [], last: new THREE.Vector3(), seat: -1 }; this.map.set(p.id, r); }
       r.body.setName(p.online ? p.name : `${p.name} · déco`, !p.online);
     }
     for (const [id, r] of this.map) if (!players.some(p => p.id === id)) { r.body.dispose(); this.map.delete(id); }
   }
   place(id: string, x: number, z: number, yaw: number) {
     const r = this.map.get(id); if (!r) return;
-    r.buf = [{ t: performance.now() - DELAY, x, z, yaw }];
+    r.buf = [{ t: performance.now() - DELAY, x, z, yaw, seat: -1 }];
     r.body.holder.position.set(x, 0, z); r.body.holder.rotation.y = yaw; r.last.set(x, 0, z);
   }
-  snap(p: [string, number, number, number, number][], me: string) {
+  snap(p: [string, number, number, number, number, number][], me: string) {
     const t = performance.now();
-    for (const [id, x, z, yaw] of p) {
+    this.busySlots.clear();
+    for (const [id, x, z, yaw, , seat] of p) {
       if (id === me) continue;
+      if (seat >= 0) this.busySlots.add(seat);
       const r = this.map.get(id); if (!r) continue;
-      r.buf.push({ t, x, z, yaw });
+      r.buf.push({ t, x, z, yaw, seat: seat ?? -1 });
       if (r.buf.length > 30) r.buf.shift();
     }
   }
@@ -140,6 +181,13 @@ export class Remotes {
     const rt = performance.now() - DELAY;
     for (const r of this.map.values()) {
       const b = r.buf; if (!b.length) continue;
+      const seat = b[b.length - 1].seat;
+      if (seat !== r.seat) {
+        r.seat = seat;
+        if (seat >= 0 && SLOT_LIST[seat]) { const q = slotSeat(SLOT_LIST[seat]); r.body.sit(q.x, q.z, q.yaw); }
+        else { r.body.stand(); }
+      }
+      if (r.body.seated) { r.body.animate(0, dt); continue; }
       let x = b[b.length - 1].x, z = b[b.length - 1].z, yaw = b[b.length - 1].yaw;
       for (let i = b.length - 2; i >= 0; i--) {
         if (b[i].t <= rt) {

@@ -15,10 +15,14 @@ import { LightPool, zoneAt, type LightDef, type Zone } from '../gfx/lights';
 import { Kit, blackjack, roulette, pendant } from './tables';
 import { buildRooms, wallRun } from './rooms';
 import { buildWest } from './rooms2';
-import { Crowd, populateHall, SEATS } from './people';
+import { Crowd, populateHall, SEATS, SLOT_SEAT } from './people';
+import { SLOT_LIST } from '../../shared/layout';
 import type { World } from './world';
 
 const W = 18, D = 15, H = 8.6;          // demi-largeur, demi-profondeur, hauteur des bas-côtés
+
+/** Met à jour le tableau du jackpot progressif (valeur envoyée par le serveur). */
+export let setJackpotBoard: (v: number) => void = () => {};
 
 export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World {
   const scene = new THREE.Scene();
@@ -232,17 +236,9 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
     SEATS.push({ x: sp.x, z: sp.z, yaw: (face > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI, y: .73 });
     slotGeo.chr.push(T(cyl(.04, .04, .1, 0, 2.55, -.05, 10)));
   };
-  // deux îlots dos à dos + une rangée contre le mur est
-  for (const z0 of [-10, 2.6]) for (let i = 0; i < 6; i++) {
-    const z = z0 + i * 1.0, v = (i + (z0 > 0 ? 1 : 0)) % 3;
-    addSlot(9.0, z, -1, v); addSlot(9.72, z, 1, (v + 1) % 3);
-  }
-  for (const z0 of [-10, 2.6]) for (let i = 0; i < 6; i++) {
-    const z = z0 + i * 1.0, v = (i + 2) % 3;
-    addSlot(13.2, z, -1, v); addSlot(13.92, z, 1, (v + 1) % 3);
-  }
+  // deux îlots dos à dos + une rangée contre le mur est (plan partagé avec le serveur)
+  for (const sl of SLOT_LIST) { SLOT_SEAT.push(SEATS.length); addSlot(sl.x, sl.z, sl.face, sl.v); }
   solids.push([7.9, -10.6, 10.8, -4.4], [7.9, 2, 10.8, 8.2], [12.1, -10.6, 15, -4.4], [12.1, 2, 15, 8.2]);
-  for (let i = 0; i < 15; i++) { const z = i < 8 ? -12.2 + i : 3.2 + (i - 8); addSlot(W - .55, z, -1, i % 3); }
   solids.push([W - 2, -12.8, W, -4.6], [W - 2, 2.6, W, 9.8]);
   for (let v = 0; v < 3; v++) { statics.add(mesh(slotGeo.cab[v], cabMats[v])); statics.add(mesh(slotGeo.top[v], topMats[v], false)); }
   const scr = mesh(slotGeo.scr, screenMat, false); scr.userData.keep = true; root.add(scr);
@@ -393,18 +389,17 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
   {
     const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 224;
     const jt = new THREE.CanvasTexture(cv); jt.colorSpace = THREE.SRGBColorSpace;
-    let amount = 1284397.52;
+    let amount = 0;
     const draw = () => {
       const c = cv.getContext('2d')!;
       c.fillStyle = '#07020a'; c.fillRect(0, 0, 1024, 224);
       c.textAlign = 'center'; c.fillStyle = '#ff4fb0'; c.shadowColor = '#ff4fb0'; c.shadowBlur = 18; c.font = '64px Monoton'; c.fillText('MÉGA JACKPOT', 512, 80);
       c.fillStyle = '#ffd25a'; c.shadowColor = '#ffb020'; c.font = 'bold 96px "Courier New", monospace';
-      c.fillText(amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €', 512, 186);
+      c.fillText(amount ? amount.toLocaleString('fr-FR') + ' €' : '— — —', 512, 186);
       jt.needsUpdate = true;
     };
     draw();
-    let next = 0;
-    onTick((t) => { if (t > next) { next = t + .35; amount += Math.random() * 3.7; draw(); } });
+    setJackpotBoard = (v: number) => { if (v !== amount) { amount = v; draw(); } };
     const jm = new THREE.MeshBasicMaterial({ map: jt, color: new THREE.Color(1.8, 1.8, 1.8) });
     const jk = new Kit();
     jk.add(MAT.blackMetal(), box(5.2, 1.25, .22, 11.4, 4.45, -1), cyl(.015, .015, 3.6, 9.4, 6.8, -1, 6), cyl(.015, .015, 3.6, 13.4, 6.8, -1, 6));

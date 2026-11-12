@@ -4,6 +4,7 @@
 // poker ovale, chaises de casino, cartes, sabot, panneau de mises, lampes de table.
 // ============================================================
 import * as THREE from 'three';
+import { WHEEL_ORDER } from '../../shared/games';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { SEATS, DEALERS } from './people';
 import { box, cyl, mesh, MAT, glowMat, canvasTex, onTick, rnd, glowTex, wheelTex, rouletteFeltTex, blackjackFeltTex } from '../gfx/kit';
@@ -231,10 +232,32 @@ export function roulette(k: Kit, parent: THREE.Object3D, x: number, z: number, r
     ...[0, 1, 2, 3].map(i => box(.32, .015, .015, 0, .13, 0).rotateY(i * Math.PI / 4))], M.gold, false));
   const ball = new THREE.Mesh(new THREE.SphereGeometry(.016, 10, 8), new THREE.MeshStandardMaterial({ color: '#fff', roughness: .2 }));
   parent.add(wheel, ball);
+  const A = Math.PI * 2 / 37;
+  const ctl: RouletteCtl = { x, z, wheel: new THREE.Vector3(wpos.x, .925, wpos.z), ballA: 0, rest: -1, spin: null, t: 0,
+    play(n: number, dur: number) {
+      const i = WHEEL_ORDER.indexOf(n);
+      const aEnd = (i + .5) * A - (wheel.rotation.y + .8 * dur);
+      const a0 = this.ballA;
+      const a1 = aEnd + Math.PI * 2 * Math.round((a0 - 7 * Math.PI - aEnd) / (Math.PI * 2));
+      this.spin = { i, t0: this.t, dur, a0, a1 }; this.rest = -1;
+    },
+  };
+  ROULETTE_CTL.push(ctl);
   onTick((t, dt) => {
+    ctl.t = t;
     wheel.rotation.y += dt * .8;
-    const a = -t * 2.6, rr = .53 - .06 * (.5 + .5 * Math.sin(t * .4));
-    ball.position.set(wpos.x + Math.cos(a) * rr, .945, wpos.z + Math.sin(a) * rr);
+    let a: number, rr: number, y = .945;
+    if (ctl.spin) {
+      const s = ctl.spin, k = Math.min(1, (t - s.t0) / s.dur), e = 1 - Math.pow(1 - k, 3);
+      a = s.a0 + (s.a1 - s.a0) * e;
+      const d = Math.max(0, Math.min(1, (k - .5) / .32));
+      rr = .53 - .14 * d * d * (3 - 2 * d) + Math.sin(k * 46) * .018 * Math.max(0, 1 - Math.abs(k - .75) * 5);
+      y = .945 - .015 * d;
+      if (k >= 1) { ctl.rest = s.i; ctl.spin = null; }
+    } else if (ctl.rest >= 0) { a = (ctl.rest + .5) * A - wheel.rotation.y; rr = .39; y = .93; }
+    else { a = -t * 2.6; rr = .53 - .06 * (.5 + .5 * Math.sin(t * .4)); }
+    ctl.ballA = a;
+    ball.position.set(wpos.x + Math.cos(a) * rr, y, wpos.z + Math.sin(a) * rr);
   });
   // tableau des derniers numéros
   const mq = new THREE.MeshBasicMaterial({ map: marqueeTex(), color: new THREE.Color(1.5, 1.5, 1.5) });
@@ -252,6 +275,10 @@ export function roulette(k: Kit, parent: THREE.Object3D, x: number, z: number, r
   const hw = r % Math.PI === 0 ? [3.4, 2.1] : [2.1, 3.4];
   solids.push([x - hw[0], z - hw[1], x + hw[0], z + hw[1]]);
 }
+
+export interface RouletteCtl { x: number; z: number; wheel: THREE.Vector3; ballA: number; rest: number; t: number; spin: { i: number; t0: number; dur: number; a0: number; a1: number } | null; play(n: number, dur: number): void }
+/** Les roulettes du casino, pilotées par le serveur quand des joueurs y jouent. */
+export const ROULETTE_CTL: RouletteCtl[] = [];
 
 // ---------- poker (salon privé) ----------
 export function poker(k: Kit, parent: THREE.Object3D, x: number, z: number, solids: number[][]) {

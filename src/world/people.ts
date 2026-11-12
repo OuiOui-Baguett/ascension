@@ -9,11 +9,13 @@ import { getGLTF } from '../gfx/assets';
 import { onTick } from '../gfx/kit';
 import type { V3 } from './world';
 
-export interface Seat { x: number; z: number; yaw: number; y: number }
+export interface Seat { x: number; z: number; yaw: number; y: number; taken?: boolean }
 /** Places assises enregistrées par le mobilier (chaises de casino, tabourets). */
 export const SEATS: Seat[] = [];
 /** Postes de croupier (debout, face aux joueurs). */
 export const DEALERS: Seat[] = [];
+/** Pour chaque machine à sous (ordre de shared/layout), l'index de son tabouret dans SEATS. */
+export const SLOT_SEAT: number[] = [];
 
 const clips = new Map<string, THREE.AnimationClip>();
 function clip(id: string) {
@@ -122,13 +124,14 @@ export function populateHall(c: Crowd, low: boolean) {
     else if (inR(s, [12.4, -26, 20, -17])) pct = i % 2 ? 0 : 100;  // salle de surveillance : un vigile
     else if (inR(s, [-14, -27, -5.2, -15.3])) pct = 40;       // salle de comptage
     if (!pct || !keep(i, pct)) return;
+    s.taken = true;
     const staff = inR(s, [-14, -27, 20, -15.3]);
     c.spawn(staff ? (inR(s, [12.4, -26, 20, -17]) ? 'Security_Male_01' : 'Business_Male_06') : pick(i, female), staff ? 'm_sit_table_idle_neutral_01' : sitAnim, s.x, 0, s.z, s.yaw, { seat: s.y });
   });
   DEALERS.forEach((d, i) => c.spawn(i % 3 === 2 ? 'Business_Female_01' : 'Business_Male_06', i % 3 === 2 ? 'f_idle_neutral_01' : (i % 2 ? 'm_idle_neutral_02' : 'm_gestic_talk_neutral_01'), d.x, 0, d.z, d.yaw));
   // caisse, vigiles
-  c.spawn('Business_Female_01', 'f_idle_neutral_01', 1.3, 0, -13.25, 0);
-  c.spawn('Business_Male_06', 'm_idle_neutral_02', -2.7, 0, -13.25, 0);
+  c.spawn('Business_Female_01', 'f_idle_neutral_01', 0, 0, -13.2, 0);
+  c.spawn('Business_Male_06', 'm_idle_neutral_02', -3.6, 0, -13.2, 0);
   c.spawn('Security_Male_01', 'm_idle_neutral_01', 4.2, 0, -11, -.5);
   c.spawn('Security_Male_01', 'm_idle_neutral_02', 17.15, 0, 2.3, -Math.PI / 2);
   // bar : barman, clients accoudés, salon, chanteuse

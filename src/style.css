@@ -130,3 +130,90 @@ body.cine #bars i { transform: none; }
 #wait { position: fixed; right: 20px; bottom: 20px; z-index: 41; font-size: 20px; letter-spacing: .3em; transition: opacity .3s; }
 @keyframes dip { 0% { opacity: 0; } 35% { opacity: 1; } 100% { opacity: 0; } }
 #fade.dip { animation: dip .55s ease; }
+
+/* ---------- nuit : argent, horloge, actions ---------- */
+#play { position: absolute; inset: 0; pointer-events: none; transition: opacity .4s; }
+#p-top { position: absolute; top: calc(12px + var(--safe-t)); right: 12px; display: flex; align-items: center; gap: 10px; pointer-events: auto; padding: 6px 8px 6px 14px; background: rgba(10,8,8,.55); border: 1px solid rgba(217,164,65,.35); border-radius: 4px; backdrop-filter: blur(6px); }
+#p-clock { font-size: 13px; letter-spacing: .1em; opacity: .85; }
+#p-money { font: 26px/1 'Bebas Neue', Impact, sans-serif; letter-spacing: .06em; color: var(--gold); min-width: 64px; text-align: right; }
+#p-bag { font-size: 12px; letter-spacing: .1em; padding: 6px 10px; border: 1px solid rgba(241,227,196,.35); border-radius: 3px; }
+#p-bag small { color: var(--gold); }
+.act { position: absolute; right: 22px; bottom: calc(26px + var(--safe-b)); width: 88px; height: 88px; border-radius: 50%; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+  font: 22px 'Bebas Neue', Impact, sans-serif; letter-spacing: .08em; color: #1b1410; background: radial-gradient(circle at 35% 30%, #ffe7a8, #d9a441 60%, #8a5f1c); box-shadow: 0 6px 20px rgba(0,0,0,.55), 0 0 0 3px rgba(255,231,168,.25); transition: opacity .25s, transform .15s; }
+.act small { font: 11px 'Special Elite', monospace; letter-spacing: .02em; margin-top: 3px; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act:active { transform: scale(.94); }
+.act.sub { right: 124px; width: 70px; height: 70px; bottom: calc(34px + var(--safe-b)); font-size: 18px; background: radial-gradient(circle at 35% 30%, #f6ead0, #b9a98a 60%, #6b5f4a); }
+body.panel-open #help, body.panel-open #joy { display: none; }
+
+/* ---------- panneaux ---------- */
+.panel { position: fixed; z-index: 30; left: 50%; bottom: 0; transform: translateX(-50%); width: min(560px, 100vw); max-height: 64vh; overflow: auto; overscroll-behavior: contain;
+  background: rgba(16,11,10,.93); border: 1px solid rgba(217,164,65,.4); border-bottom: 0; border-radius: 12px 12px 0 0; padding: 12px 14px calc(14px + var(--safe-b)); backdrop-filter: blur(10px); transition: opacity .25s; box-shadow: 0 -10px 40px rgba(0,0,0,.5); }
+.panel.hidden { display: none; }
+.panel header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.panel h2 { margin: 0; flex: 1; min-width: 0; font: 24px/1.1 'Bebas Neue', Impact, sans-serif; letter-spacing: .07em; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel h2 b { color: var(--gold); font-weight: normal; }
+.panel .x { font-size: 12px; letter-spacing: .08em; padding: 7px 12px; border: 1px solid rgba(241,227,196,.4); border-radius: 3px; white-space: nowrap; }
+.pm { font-size: 12px; opacity: .8; } .pm b { color: var(--gold); font: 20px 'Bebas Neue', Impact, sans-serif; letter-spacing: .05em; }
+.items { list-style: none; margin: 0; padding: 0; }
+.items li { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px dashed rgba(241,227,196,.14); }
+.items li > div { flex: 1; font-size: 14px; }
+.items li i { font-style: normal; color: var(--gold); font-size: 12px; }
+.items p { margin: 2px 0 0; font-size: 11.5px; opacity: .62; line-height: 1.35; }
+.items li.empty { font-size: 13px; opacity: .7; border: 0; }
+.items button { min-width: 92px; padding: 7px 8px 5px; border-radius: 4px; background: var(--gold); color: #1b1410; display: flex; flex-direction: column; align-items: center; }
+.items button span { font: 20px/1 'Bebas Neue', Impact, sans-serif; letter-spacing: .05em; }
+.items button small { font-size: 10px; opacity: .75; margin-top: 2px; }
+.items button:disabled { background: #3a332c; color: #9a8f80; }
+.panel .foot { font-size: 11px; opacity: .5; margin: 10px 0 0; line-height: 1.4; }
+.gives { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.gives button, #s-spin { padding: 12px 0 9px; border-radius: 4px; background: var(--gold); color: #1b1410; font: 22px/1 'Bebas Neue', Impact, sans-serif; letter-spacing: .06em; }
+
+/* roulette */
+.hist { display: flex; gap: 3px; min-height: 20px; margin-bottom: 8px; overflow: hidden; }
+.hist i { font: 13px/20px 'Bebas Neue', Impact, sans-serif; font-style: normal; min-width: 22px; text-align: center; border-radius: 3px; }
+.hist i:first-child { outline: 1px solid var(--gold); }
+.r, .hist i.r { background: #a8101b; } .k, .hist i.k { background: #161414; } .g, .hist i.g { background: #0f7a3a; }
+#r-phase b { padding: 0 6px; border-radius: 3px; }
+#r-time { font: 24px 'Bebas Neue', Impact, sans-serif; color: var(--gold); min-width: 34px; text-align: right; }
+.felt { background: #0d4a2a; border-radius: 6px; padding: 6px; transition: opacity .3s; }
+#roul.closed .felt { opacity: .45; pointer-events: none; }
+#r-grid { display: grid; grid-template-columns: 1.3fr repeat(12, 1fr); grid-template-rows: repeat(3, 28px); gap: 2px; }
+#r-out { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; margin-top: 3px; }
+#r-out .dz { grid-column: span 2; }
+.felt button { position: relative; border: 1px solid rgba(255,255,255,.25); border-radius: 2px; font: 15px/1 'Bebas Neue', Impact, sans-serif; letter-spacing: .03em; color: #f4ead2; min-height: 28px; padding: 0; }
+.felt .z { grid-row: 1 / span 3; background: #0f7a3a; }
+#r-out button { font-family: 'Special Elite', monospace; font-size: 11px; }
+#r-out button.r, #r-out button.k { font-size: 16px; color: transparent; }
+#r-out button.r::before, #r-out button.k::before { content: '◆'; color: #f4ead2; font-size: 14px; }
+.felt button.has { box-shadow: inset 0 0 0 2px var(--gold); }
+.felt button.has::after { content: attr(data-chip); position: absolute; top: -7px; right: -5px; z-index: 2; background: var(--gold); color: #1b1410; border-radius: 9px; padding: 2px 4px 1px; font: 11px/1 'Bebas Neue', Impact, sans-serif; box-shadow: 0 1px 4px #000; }
+.rbar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.chips { display: flex; gap: 6px; flex: 1; }
+.chips button { width: 44px; height: 44px; border-radius: 50%; font: 15px/1 'Bebas Neue', Impact, sans-serif; color: #fff; background: #333; border: 3px dashed rgba(255,255,255,.55); transition: transform .15s; }
+.chips button:nth-child(1) { background: #c4141e; } .chips button:nth-child(2) { background: #1a3fbf; } .chips button:nth-child(3) { background: #178a3a; } .chips button:nth-child(4) { background: #7a1aa8; }
+.chips button.on { transform: translateY(-4px) scale(1.08); box-shadow: 0 0 0 2px var(--gold), 0 4px 12px rgba(0,0,0,.6); }
+#r-clear { font-size: 11px; padding: 7px 9px; border: 1px solid rgba(241,227,196,.35); border-radius: 3px; }
+.rinfo { display: flex; gap: 12px; align-items: baseline; font-size: 12px; margin-top: 6px; opacity: .85; }
+.rinfo b { margin-left: auto; color: var(--gold); font: 20px 'Bebas Neue', Impact, sans-serif; letter-spacing: .05em; }
+#s-msg { min-height: 20px; margin-top: 6px; font-size: 14px; text-align: center; }
+#r-msg { font-size: 13px; text-align: center; margin: -2px 0 6px; } #r-msg:empty { display: none; }
+.win { color: #ffd25a; font: 24px 'Bebas Neue', Impact, sans-serif; letter-spacing: .06em; font-weight: normal; }
+
+/* machines */
+.sline { display: flex; align-items: center; gap: 10px; }
+.sline b { color: var(--gold); font: 22px 'Bebas Neue', Impact, sans-serif; letter-spacing: .05em; }
+#s-bets button { width: auto; height: 38px; padding: 0 12px; border-radius: 19px; border-style: solid; }
+#s-spin { width: 100%; margin-top: 10px; font-size: 30px; padding: 14px 0 11px; background: linear-gradient(180deg, #ff4a3a, #a8101b); color: #fff; box-shadow: 0 5px 0 #5a0006; }
+#s-spin:active { transform: translateY(3px); box-shadow: 0 2px 0 #5a0006; }
+details { margin-top: 8px; font-size: 12px; opacity: .8; }
+#s-pays { display: grid; grid-template-columns: 1fr auto; gap: 2px 14px; margin-top: 6px; }
+#s-pays b { color: var(--gold); font-weight: normal; }
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .panel { left: auto; right: 8px; top: calc(8px + var(--safe-t)); bottom: 8px; transform: none; width: min(440px, 54vw); max-height: none; border-radius: 8px; border-bottom: 1px solid rgba(217,164,65,.4); padding-bottom: 12px; }
+  .panel.small { top: auto; }
+  body.panel-open #p-top { right: calc(min(440px, 54vw) + 20px); }
+  #r-grid { grid-template-rows: repeat(3, 24px); }
+  .felt button { min-height: 24px; }
+  .chips button { width: 38px; height: 38px; }
+}

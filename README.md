@@ -3,9 +3,11 @@
 Jeu de braquage coopératif pour 3 à 8 joueurs sur mobile, avec un ou plusieurs indics cachés dans l'équipe.
 Navigateur (lien / PWA), Three.js + Vite + TypeScript, serveur Node (WebSocket).
 
-**État actuel : étape 1 — multijoueur de base.** Parties par code, personnage tiré au sort à chaque nuit,
-cinématique d'entrée pour tout le monde, vue à l'épaule, marche et course dans le casino, on voit les autres
-joueurs bouger, reconnexion automatique. Pas encore d'argent, de rôles ni de casse.
+**État actuel : étape 2 — argent et caisse.** Parties par code, personnage tiré au sort, vue à l'épaule,
+reconnexion (étape 1). Chacun entre avec 500 €, horloge de la nuit (23 h 47 → 3 h), caisse avec les 11 objets
+(prix ±30 % et stocks par nuit), sac, dons d'argent entre joueurs, roulette européenne à plusieurs (vraie bille
+qui tombe sur le numéro tiré par le serveur), machines à sous avec jackpot progressif commun.
+Pas encore d'indic, de vigiles ni de casse : les objets achetés ne font encore rien.
 
 ## Jouer en ligne avec des amis (hébergement gratuit sur Render)
 
@@ -35,7 +37,8 @@ Version d'aperçu sans serveur (avec des bots) : `npm run build:solo` → `dist-
 Paramètres utiles dans l'URL : `?local` (serveur dans la page, avec bots), `?quality=high|medium|low`,
 `?server=wss://autre-serveur/ws`, `?view=hall`, `?shot=0`, `?clean`.
 
-Commandes au clavier : ZQSD / WASD pour marcher, Maj pour courir, souris (clic-glisser) pour tourner la caméra.
+Commandes au clavier : ZQSD / WASD pour marcher, Maj pour courir, souris (clic-glisser) pour tourner la caméra,
+E pour utiliser (caisse, roulette, machine), Espace pour lancer une machine, Échap pour fermer.
 Sur téléphone : pouce gauche = joystick (poussé à fond = course), glisser à droite = caméra.
 
 ## Structure
@@ -44,6 +47,8 @@ Sur téléphone : pouce gauche = joystick (poussé à fond = course), glisser à
   il tourne aussi dans la page pour la version d'aperçu
 - `server/` — serveur Node : sert le site et les parties en WebSocket sur `/ws`
 - `src/net.ts` — connexion, jeton de reconnexion, mode local
+- `shared/items.ts`, `shared/games.ts`, `shared/layout.ts` — objets, règles et cotes des jeux, plan du casino
+- `src/play.ts` — interface de la nuit : argent, horloge, caisse, sac, roulette, machines
 - `src/player.ts` — corps des joueurs (Rocketbox), animations marche/course, interpolation des autres joueurs
 - `src/cam.ts` — plans de cinéma et vue à l'épaule
 - `src/gfx/` — moteur de rendu (post-process, reflets planaires, pluie, textures peintes)

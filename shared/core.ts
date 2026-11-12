@@ -3,7 +3,10 @@
 // (WebSocket) et dans le navigateur pour la version d'aperçu (bots compris).
 // Le serveur fait autorité : salons, tirage des personnages, positions diffusées.
 // ============================================================
-import { PLAYER_AVATARS, MAX_PLAYERS, TICK_MS, type ClientMsg, type ServerMsg, type Settings, type PlayerInfo } from './protocol';
+import { PLAYER_AVATARS, MAX_PLAYERS, TICK_MS, type ClientMsg, type ServerMsg, type Settings, type PlayerInfo, type TableState } from './protocol';
+import { ITEMS, START_MONEY } from './items';
+import { CAISSE, ROULETTES, SLOT_LIST, slotSeat, dist2, REPERAGE_MS } from './layout';
+import { slotSpin, SLOT_BETS, CHIPS, ROUL_PHASES, rouletteReturn, type BetKind } from './games';
 
 export interface Conn { send(m: ServerMsg): void }
 
@@ -12,10 +15,13 @@ interface Player {
   conn: Conn | null; room: Room | null; lastSeen: number;
   x: number; z: number; yaw: number; mv: number; t: number;
   bot?: { path: [number, number][]; i: number; speed: number };
+  money: number; inv: Record<string, number>; seat: number; table: number; busy: number;
 }
+interface RTable { id: number; ph: TableState['ph']; endsAt: number; bets: { p: Player; kind: BetKind; value: number; amount: number }[]; res: number; hist: number[]; wins: [string, number][]; players: Set<Player> }
 interface Room {
   code: string; host: string; players: Player[]; phase: 'lobby' | 'night';
   settings: Settings; seed: number; startedAt: number;
+  prices: Record<string, number>; stock: Record<string, number>; jackpot: number; tables: RTable[]; slotOwner: Map<number, Player>;
 }
 
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -56,7 +62,12 @@ export class Core {
       conn.send({ t: 'welcome', id: p.id, token: p.token });
       if (p.room) {
         this.broadcastLobby(p.room);
-        if (p.room.phase === 'night') conn.send(this.startedMsg(p.room, true));
+        if (p.room.phase === 'night') {
+          // retour en pleine nuit : on se relève, on garde ses mises en cours
+          this.standUp(p); this.leaveTable(p);
+          conn.send(this.startedMsg(p.room, true));
+          this.sendEcon(p.room, p);
+        }
       }
       return p;
     }
@@ -67,7 +78,7 @@ export class Core {
         this.leave(me);
         let code = '';
         do code = Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join(''); while (this.rooms.has(code));
-        const room: Room = { code, host: me.id, players: [], phase: 'lobby', settings: { indics: 1, duree: 'normale' }, seed: 0, startedAt: 0 };
+        const room: Room = { code, host: me.id, players: [], phase: 'lobby', settings: { indics: 1, duree: 'normale' }, seed: 0, startedAt: 0, prices: {}, stock: {}, jackpot: 0, tables: [], slotOwner: new Map() };
         this.rooms.set(code, room);
         this.join(me, room);
         break;
@@ -113,8 +124,15 @@ export class Core {
           if (p.bot) { const q = p.bot.path[p.bot.i]; p.x = q[0]; p.z = q[1]; } else { p.x = s[0]; p.z = s[1]; }
           p.yaw = 0; p.mv = 0; p.t = now;
         });
+        // économie de la nuit : prix ±30 %, stocks, jackpot, tables
+        r.prices = {}; r.stock = {};
+        for (const it of ITEMS) { r.prices[it.id] = Math.round(it.price * (.7 + Math.random() * .6) / 10) * 10; r.stock[it.id] = it.stock; }
+        r.jackpot = 3000 + Math.round(Math.random() * 1500);
+        r.tables = ROULETTES.map((_, id) => ({ id, ph: 'idle', endsAt: 0, bets: [], res: -1, hist: [], wins: [], players: new Set() }));
+        r.slotOwner = new Map();
+        for (const p of r.players) { p.money = START_MONEY; p.inv = {}; p.seat = -1; p.table = -1; p.busy = 0; }
         this.broadcastLobby(r);
-        for (const p of r.players) p.conn?.send(this.startedMsg(r, false));
+        for (const p of r.players) { p.conn?.send(this.startedMsg(r, false)); this.sendEcon(r, p); }
         break;
       }
       case 'input': {
@@ -122,17 +140,145 @@ export class Core {
         if (!r || r.phase !== 'night' || !Number.isFinite(m.x) || !Number.isFinite(m.z) || !Number.isFinite(m.yaw)) break;
         // garde-fou : on refuse un déplacement impossible (plus de 9 m/s)
         const dt = Math.max(.03, (now - me.t) / 1000), d = Math.hypot(m.x - me.x, m.z - me.z);
-        if (d / dt < 9 || d > 30) { me.x = m.x; me.z = m.z; }
+        if (me.seat >= 0) { me.t = now; break; }
+        // tolérance pour les paquets groupés ; au-delà on rapproche sans téléporter
+        const allowed = 9 * dt + 1.5;
+        if (d <= allowed || d > 40) { me.x = m.x; me.z = m.z; }
+        else { me.x += (m.x - me.x) / d * allowed; me.z += (m.z - me.z) / d * allowed; }
         me.yaw = m.yaw; me.mv = m.mv | 0; me.t = now;
         break;
       }
       case 'leave': this.leave(me); conn.send({ t: 'left' }); break;
+      default: this.game(me, m, now);
     }
     return me;
   }
 
+  /** Argent, caisse et jeux : tout est vérifié ici (distance, solde, stock, phase). */
+  private game(me: Player, m: ClientMsg, now: number) {
+    const r = me.room;
+    if (!r || r.phase !== 'night') return;
+    const near = (x: number, z: number, d: number) => dist2(me.x, me.z, x, z) < d * d;
+    switch (m.t) {
+      case 'buy': {
+        const it = ITEMS.find(i => i.id === m.item), price = r.prices[m.item];
+        if (!it || now < me.busy) return;
+        if (!near(CAISSE.x, CAISSE.z, 3.5)) return this.err(me, 'Approche-toi du guichet.');
+        if ((r.stock[it.id] ?? 0) <= 0) return this.err(me, 'Plus en stock cette nuit.');
+        if (me.money < price) return this.err(me, 'Pas assez d\'argent.');
+        me.money -= price; me.inv[it.id] = (me.inv[it.id] ?? 0) + 1; r.stock[it.id]--; me.busy = now + 2000;
+        this.sendMe(me);
+        this.all(r, { t: 'shop', prices: r.prices, stock: r.stock });
+        this.all(r, { t: 'fx', k: 'env', id: me.id, c: 'white' });
+        break;
+      }
+      case 'give': {
+        const to = r.players.find(p => p.id === m.to), a = Math.floor(m.amount);
+        if (!to || to === me || !(a > 0)) return;
+        if (!near(to.x, to.z, 3.2)) return this.err(me, 'Rapproche-toi pour donner.');
+        if (me.money < a) return this.err(me, 'Pas assez d\'argent.');
+        me.money -= a; to.money += a;
+        this.sendMe(me); this.sendMe(to);
+        to.conn?.send({ t: 'note', msg: `${me.name} t'a donné ${a} €` });
+        me.conn?.send({ t: 'note', msg: `Tu as donné ${a} € à ${to.name}` });
+        break;
+      }
+      case 'sit': {
+        const s = SLOT_LIST[m.slot];
+        if (!s) return;
+        const seat = slotSeat(s), owner = r.slotOwner.get(m.slot);
+        if (owner && owner !== me) return this.err(me, 'Machine déjà prise.');
+        if (!near(seat.x, seat.z, 3)) return;
+        this.standUp(me); this.leaveTable(me);
+        me.seat = m.slot; r.slotOwner.set(m.slot, me); me.x = seat.x; me.z = seat.z; me.yaw = seat.yaw;
+        break;
+      }
+      case 'stand': this.standUp(me); break;
+      case 'spin': {
+        if (me.seat < 0 || now < me.busy || !SLOT_BETS.includes(m.bet)) return;
+        if (me.money < m.bet) return this.err(me, 'Pas assez d\'argent.');
+        me.money -= m.bet; r.jackpot += Math.round(m.bet * .06); me.busy = now + 2300;
+        const o = slotSpin(m.bet, r.jackpot);
+        me.money += o.win;
+        me.conn?.send({ t: 'slot', reels: o.reels, win: o.win, jackpot: o.jackpot, money: me.money });
+        if (o.jackpot) { r.jackpot = 3000; this.all(r, { t: 'jack', v: r.jackpot, who: me.name, amount: o.win }); }
+        else this.all(r, { t: 'jack', v: r.jackpot });
+        break;
+      }
+      case 'rjoin': {
+        const tb = r.tables[m.table], pos = ROULETTES[m.table];
+        if (!tb || !near(pos.x, pos.z, 4.6)) return;
+        this.standUp(me); this.leaveTable(me);
+        me.table = tb.id; tb.players.add(me);
+        if (tb.ph === 'idle') { tb.ph = 'bets'; tb.endsAt = now + ROUL_PHASES.bets; this.tableOut(tb); }
+        else me.conn?.send({ t: 'rtab', s: this.tableState(tb) });
+        break;
+      }
+      case 'rleave': this.leaveTable(me); break;
+      case 'bet': {
+        const tb = r.tables[me.table];
+        if (!tb || tb.ph !== 'bets' || !CHIPS.includes(m.amount)) return;
+        const kinds: BetKind[] = ['n', 'red', 'black', 'even', 'odd', 'low', 'high', 'd1', 'd2', 'd3'];
+        if (!kinds.includes(m.kind) || (m.kind === 'n' && !(m.value >= 0 && m.value <= 36 && Number.isInteger(m.value)))) return;
+        if (me.money < m.amount) return this.err(me, 'Pas assez d\'argent.');
+        if (tb.bets.filter(b => b.p === me).length >= 30) return;
+        me.money -= m.amount;
+        tb.bets.push({ p: me, kind: m.kind, value: m.kind === 'n' ? m.value : 0, amount: m.amount });
+        this.sendMe(me); this.tableOut(tb);
+        break;
+      }
+      case 'bclear': {
+        const tb = r.tables[me.table];
+        if (!tb || tb.ph !== 'bets') return;
+        for (const b of tb.bets) if (b.p === me) me.money += b.amount;
+        tb.bets = tb.bets.filter(b => b.p !== me);
+        this.sendMe(me); this.tableOut(tb);
+        break;
+      }
+    }
+  }
+  private standUp(p: Player) {
+    const r = p.room;
+    if (p.seat >= 0 && r && r.slotOwner.get(p.seat) === p) r.slotOwner.delete(p.seat);
+    p.seat = -1;
+  }
+  private leaveTable(p: Player) {
+    const tb = p.room?.tables[p.table];
+    tb?.players.delete(p);
+    p.table = -1;
+  }
+  private tableState(tb: RTable): TableState {
+    return { id: tb.id, ph: tb.ph, left: Math.max(0, tb.endsAt - Date.now()), bets: tb.bets.map(b => [b.p.id, b.kind, b.value, b.amount]), res: tb.ph === 'bets' || tb.ph === 'idle' ? -1 : tb.res, hist: tb.hist, wins: tb.wins };
+  }
+  private tableOut(tb: RTable) { const s = this.tableState(tb); for (const p of tb.players) p.conn?.send({ t: 'rtab', s }); }
+  private stepTable(r: Room, tb: RTable, now: number) {
+    if (tb.ph === 'idle' || now < tb.endsAt) return;
+    if (tb.ph === 'bets') {
+      if (!tb.players.size && !tb.bets.length) { tb.ph = 'idle'; return; }
+      tb.ph = 'spin'; tb.res = Math.floor(Math.random() * 37); tb.wins = []; tb.endsAt = now + ROUL_PHASES.spin;
+    } else if (tb.ph === 'spin') {
+      const won = new Map<Player, number>();
+      for (const b of tb.bets) { const g = rouletteReturn(b.kind, b.value, b.amount, tb.res); if (g) won.set(b.p, (won.get(b.p) ?? 0) + g); }
+      for (const [p, g] of won) { p.money += g; this.sendMe(p); }
+      tb.wins = [...won].map(([p, g]) => [p.id, g]);
+      tb.hist = [tb.res, ...tb.hist].slice(0, 12); tb.bets = [];
+      tb.ph = 'result'; tb.endsAt = now + ROUL_PHASES.result;
+    } else {
+      if (tb.players.size) { tb.ph = 'bets'; tb.endsAt = now + ROUL_PHASES.bets; } else tb.ph = 'idle';
+    }
+    this.tableOut(tb);
+  }
+  private sendMe(p: Player) { p.conn?.send({ t: 'me', money: p.money, inv: p.inv }); }
+  private sendEcon(r: Room, p: Player) {
+    this.sendMe(p);
+    p.conn?.send({ t: 'shop', prices: r.prices, stock: r.stock });
+    p.conn?.send({ t: 'jack', v: r.jackpot });
+  }
+  private err(p: Player, msg: string) { p.conn?.send({ t: 'error', msg }); }
+  private all(r: Room, m: ServerMsg) { for (const p of r.players) p.conn?.send(m); }
+
   private newPlayer(name: string): Player {
-    const p: Player = { id: rid(8), token: rid(24), name: clean(name), avatar: '', conn: null, room: null, lastSeen: Date.now(), x: 0, z: 0, yaw: 0, mv: 0, t: 0 };
+    const p: Player = { id: rid(8), token: rid(24), name: clean(name), avatar: '', conn: null, room: null, lastSeen: Date.now(), x: 0, z: 0, yaw: 0, mv: 0, t: 0, money: 0, inv: {}, seat: -1, table: -1, busy: 0 };
     this.byToken.set(p.token, p);
     return p;
   }
@@ -144,6 +290,7 @@ export class Core {
   private leave(p: Player) {
     const r = p.room;
     if (!r) return;
+    this.standUp(p); this.leaveTable(p);
     r.players = r.players.filter(q => q !== p);
     p.room = null;
     const humans = r.players.filter(q => !q.bot);
@@ -160,7 +307,7 @@ export class Core {
     for (const p of r.players) p.conn?.send(msg);
   }
   private startedMsg(r: Room, rejoin: boolean): ServerMsg {
-    return { t: 'started', seed: r.seed, rejoin, elapsed: Date.now() - r.startedAt, players: this.info(r), pos: r.players.map(p => [p.id, p.x, p.z, p.yaw]) };
+    return { t: 'started', seed: r.seed, rejoin, elapsed: Date.now() - r.startedAt, dur: REPERAGE_MS[r.settings.duree], players: this.info(r), pos: r.players.map(p => [p.id, p.x, p.z, p.yaw]) };
   }
 
   private tick() {
@@ -170,7 +317,8 @@ export class Core {
       for (const p of [...r.players]) if (!p.bot && !p.conn && now - p.lastSeen > 120000) { this.leave(p); this.byToken.delete(p.token); }
       if (!this.rooms.has(r.code) || r.phase !== 'night') continue;
       for (const p of r.players) if (p.bot) this.moveBot(p, TICK_MS / 1000);
-      const snap: ServerMsg = { t: 'snap', p: r.players.map(p => [p.id, round(p.x), round(p.z), round(p.yaw), p.mv]) };
+      for (const tb of r.tables) this.stepTable(r, tb, now);
+      const snap: ServerMsg = { t: 'snap', p: r.players.map(p => [p.id, round(p.x), round(p.z), round(p.yaw), p.seat >= 0 ? 0 : p.mv, p.seat]) };
       for (const p of r.players) p.conn?.send(snap);
     }
   }

@@ -22,6 +22,7 @@ import { Director, Rail, Walker } from './cam';
 import { startAudio, setMode, setMuted, isMuted } from './audio';
 import { Net, LOCAL } from './net';
 import { Body, Remotes, CHARACTER } from './player';
+import { Play } from './play';
 import type { ServerMsg } from '../shared/protocol';
 
 type Lobby = Extract<ServerMsg, { t: 'lobby' }>;
@@ -152,6 +153,7 @@ function startExplore() {
     const sp = hall!.spawn!.pos;
     walker.place(me ? me[1] : sp[0], me ? me[2] : sp[2], Math.PI);
     walker.active = true;
+    if (night) play.start(night.elapsed + performance.now() - nightAt, night.dur);
     const av = night?.players.find(p => p.id === net.id)?.avatar;
     if (av && !night?.rejoin) toast(`Ce soir, tu joues`, CHARACTER[av] ?? '');
   };
@@ -170,7 +172,12 @@ async function backToStreet() {
 // ---------- réseau : salon et nuit ----------
 const net = new Net();
 let lobby: Lobby | null = null, night: Night | null = null, pendingNight: Night | null = null;
-let remotes: Remotes | null = null, myBody: Body | null = null, nightSeed = -1;
+let remotes: Remotes | null = null, myBody: Body | null = null, nightSeed = -1, nightAt = 0;
+const play = new Play({
+  net, walker, cam: () => world.camera, scene: () => hall?.scene ?? null, body: () => myBody, remotes: () => remotes,
+  names: () => new Map((lobby?.players ?? []).map(p => [p.id, p.name])),
+  toast: (a, b) => toast(a, b), error: m => showError(m),
+});
 
 net.onStatus = s => {
   const el = $('#net');
@@ -178,6 +185,7 @@ net.onStatus = s => {
   el.classList.toggle('hidden', s === 'online' || state === 'loading');
 };
 net.onMsg = m => {
+  if (play.onMsg(m)) return;
   switch (m.t) {
     case 'lobby':
       lobby = m;
@@ -196,7 +204,7 @@ net.onMsg = m => {
 function onStarted(m: Night) {
   if (state === 'loading') { pendingNight = m; return; }
   const same = m.seed === nightSeed;
-  night = m;
+  night = m; nightAt = performance.now();
   if (same && (state === 'explore' || state === 'cine' || state === 'enter')) {
     // simple reconnexion : on garde sa position, on remet les autres à jour
     remotes?.sync(m.players, net.id);
@@ -229,6 +237,7 @@ function setupNight() {
   updateBadge();
 }
 function teardownNight() {
+  play.stop();
   remotes?.clear(); remotes = null;
   myBody?.dispose(); myBody = null; walker.body = null;
 }
@@ -242,6 +251,7 @@ function sendInput(dt: number, now: number) {
   const x = +walker.pos.x.toFixed(2), z = +walker.pos.z.toFixed(2), yaw = +walker.bodyYaw.toFixed(2);
   const mv = walker.speed > 2.5 ? 2 : walker.speed > .2 ? 1 : 0;
   const key = `${x},${z},${yaw},${mv}`;
+  if (play.mode === 'slot') return;
   if (key === lastSent && now - lastSentAt < 1000) return;
   lastSent = key; lastSentAt = now;
   net.send({ t: 'input', x, z, yaw, mv });
@@ -372,7 +382,7 @@ function frame(now: number) {
     director.update(stillN ? 1 / 30 : dt, time);
     rail.update(dt);
     walker.update(dt, world);
-    if (world === hall) { remotes?.update(dt); if (!walker.active && myBody) myBody.animate(0, dt); }
+    if (world === hall) { remotes?.update(dt); if (!walker.active && myBody) myBody.animate(0, dt); play.update(dt); }
     sendInput(dt, now);
     if (state === 'title') focusDof(director.focus, 14);
     else if (state === 'cine') focusDof(director.focus, Math.max(3, director.focus * .7));
@@ -389,6 +399,7 @@ requestAnimationFrame(frame);
 (window as any).__walk = (x: number, z: number, yaw: number, pitch = .2) => { walker.pos.set(x, 0, z); walker.yaw = yaw; walker.pitch = pitch; walker.bodyYaw = yaw + Math.PI; };
 (window as any).__net = () => ({ id: net.id, status: net.status, lobby, night: !!night, remotes: remotes?.map.size ?? 0, me: [walker.pos.x, walker.pos.z], state });
 (window as any).__keys = walker.keys;
+(window as any).__play = play;
 (window as any).__remote = (id: string) => { const r = remotes?.map.get(id); return r && [+r.body.holder.position.x.toFixed(2), +r.body.holder.position.z.toFixed(2), +r.body.speed.toFixed(2)]; };
 (window as any).__railAt = (k: number) => {
   if (world !== street) switchTo(street);
