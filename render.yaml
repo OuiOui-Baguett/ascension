@@ -1,0 +1,12 @@
+# Hébergement sur Render (render.com) : un seul service fait le site et le serveur de jeu.
+services:
+  - type: web
+    name: le-casse
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

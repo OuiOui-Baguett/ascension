@@ -18,7 +18,7 @@
   </div>
 
   <div id="title" class="hidden">
-    <div class="kicker">Un jeu de braquage pour 4 à 8 complices</div>
+    <div class="kicker">Un jeu de braquage pour 3 à 8 complices</div>
     <h1 class="logo" aria-label="Le Casse">
       <span class="lg lg-top">LE CASSE</span>
       <span class="lg lg-bot">LE CASSE</span>
@@ -29,14 +29,32 @@
     <section class="dossier">
       <div class="tab">DOSSIER Nº 23-47</div>
       <div class="stamp">CONFIDENTIEL</div>
-      <div class="dl"><span>Objectif</span><b>Grand Casino — la caisse</b></div>
-      <div class="dl"><span>Équipe</span><b>4 à 8 · dont 1 indic</b></div>
-      <nav>
-        <button id="go" class="primary">Entrer au casino <s>▸</s></button>
-        <button id="q">Qualité : <b>Auto</b></button>
-        <button id="snd">Son : <b>Oui</b></button>
-      </nav>
-      <div class="note">Test de rendu — pas encore de gameplay · Personnages : Microsoft Rocketbox (MIT)</div>
+
+      <div id="v-home" class="view">
+        <div class="dl"><span>Objectif</span><b>Grand Casino — la caisse</b></div>
+        <div class="dl"><span>Équipe</span><b>3 à 8 · dont au moins un indic</b></div>
+        <label class="field"><span>Ton pseudo</span><input id="name" maxlength="16" placeholder="Ton prénom" autocomplete="off" spellcheck="false" enterkeyhint="done"></label>
+        <nav>
+          <button id="create" class="primary">Créer une partie <s>▸</s></button>
+          <div class="join" id="join-row"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go"><button id="join">Rejoindre ▸</button></div>
+          <div class="row"><button id="q">Qualité : <b>Auto</b></button><button id="snd">Son : <b>Oui</b></button></div>
+        </nav>
+        <div class="note" id="home-note">Personnages : Microsoft Rocketbox (MIT)</div>
+      </div>
+
+      <div id="v-lobby" class="view hidden">
+        <div class="code"><span>Code de la partie</span><b id="l-code">····</b></div>
+        <ul id="l-players"></ul>
+        <div class="sets">
+          <div class="set"><span>Indics</span><div class="step"><button data-ind="-1">−</button><b id="l-ind">1</b><button data-ind="1">+</button></div></div>
+          <div class="set"><span>Durée</span><div class="seg" id="l-dur"><button data-d="courte">15 min</button><button data-d="normale">20 min</button><button data-d="longue">30 min</button></div></div>
+        </div>
+        <nav>
+          <button id="start" class="primary">Lancer la nuit <s>▸</s></button>
+          <div class="row"><button id="addbot">+ Ajouter un bot</button><button id="leave">Quitter</button></div>
+        </nav>
+        <div class="note" id="l-note"></div>
+      </div>
     </section>
   </div>
 
@@ -45,13 +63,17 @@
   <div id="skip" class="hidden">Toucher pour passer ▸▸</div>
 
   <div id="hud" class="hidden">
-    <button id="back">↩ Rue</button>
-    <div id="help">Joystick à gauche pour marcher · glissez à droite pour regarder</div>
+    <button id="back">Quitter</button>
+    <div id="badge"></div>
+    <div id="help">Pouce gauche pour marcher (à fond pour courir) · glisse à droite pour tourner la caméra</div>
+    <div id="toast"></div>
     <div id="joy"><i></i></div>
   </div>
 
   <div id="fade"></div>
   <div id="wait" class="hidden">…</div>
+  <div id="net" class="hidden">Connexion au serveur…</div>
+  <div id="err" class="hidden"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

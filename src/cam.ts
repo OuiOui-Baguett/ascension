@@ -82,10 +82,14 @@ export class Rail {
   }
 }
 
+/** Vue à l'épaule : joystick à gauche (à fond = course), glisser à droite pour tourner
+ *  la caméra. Le personnage avance dans la direction de la caméra et se tourne vers
+ *  où il va ; la caméra se rapproche quand un mur ou un meuble est derrière. */
 export class Walker {
-  pos = new THREE.Vector3(); yaw = 0; pitch = 0;
+  pos = new THREE.Vector3(); yaw = 0; pitch = .2; bodyYaw = Math.PI;
   move = new THREE.Vector2(); keys = new Set<string>();
-  active = false; bob = 0;
+  active = false; speed = 0; dist = 2.6;
+  body: { holder: THREE.Object3D; animate(v: number, dt: number): void } | null = null;
   private joyId: number | null = null; private lookId: number | null = null;
   private joyOrigin = new THREE.Vector2(); private last = new THREE.Vector2();
   constructor(public cam: THREE.PerspectiveCamera, public el: HTMLElement, public joyUi: { base: HTMLElement; knob: HTMLElement }) {
@@ -93,12 +97,14 @@ export class Walker {
     el.addEventListener('pointermove', this.moveH);
     el.addEventListener('pointerup', this.up);
     el.addEventListener('pointercancel', this.up);
-    addEventListener('keydown', e => this.keys.add(e.key.toLowerCase()));
+    addEventListener('keydown', e => { if (!(e.target instanceof HTMLInputElement)) this.keys.add(e.key.toLowerCase()); });
     addEventListener('keyup', e => this.keys.delete(e.key.toLowerCase()));
+    addEventListener('blur', () => this.keys.clear());
   }
-  place(w: World) {
-    const s = w.spawn!;
-    this.pos.set(...s.pos); this.yaw = s.yaw; this.pitch = 0;
+  /** Place le joueur (pieds au sol) ; la caméra démarre dans son dos. */
+  place(x: number, z: number, faceYaw: number) {
+    this.pos.set(x, 0, z); this.bodyYaw = faceYaw; this.yaw = faceYaw + Math.PI; this.pitch = .2; this.speed = 0;
+    this.move.set(0, 0); this.joyId = this.lookId = null; this.joyUi.base.classList.remove('on');
   }
   private down = (e: PointerEvent) => {
     if (!this.active) return;
@@ -114,18 +120,19 @@ export class Walker {
   private moveH = (e: PointerEvent) => {
     if (e.pointerId === this.joyId) {
       const d = new THREE.Vector2(e.clientX, e.clientY).sub(this.joyOrigin);
-      const r = 46; if (d.length() > r) d.setLength(r);
+      const r = 50; if (d.length() > r) d.setLength(r);
       this.move.set(d.x / r, d.y / r);
       this.joyUi.knob.style.transform = `translate(calc(-50% + ${d.x}px), calc(-50% + ${d.y}px))`;
+      this.joyUi.base.classList.toggle('run', this.move.length() > .9);
     } else if (e.pointerId === this.lookId) {
       const dx = e.clientX - this.last.x, dy = e.clientY - this.last.y;
       this.last.set(e.clientX, e.clientY);
-      const s = e.pointerType === 'mouse' ? .0032 : .0052;
-      this.yaw -= dx * s; this.pitch = Math.max(-1.1, Math.min(1.1, this.pitch - dy * s));
+      const s = e.pointerType === 'mouse' ? .0034 : .0058;
+      this.yaw -= dx * s; this.pitch = Math.max(-.3, Math.min(.85, this.pitch + dy * s * .8));
     }
   };
   private up = (e: PointerEvent) => {
-    if (e.pointerId === this.joyId) { this.joyId = null; this.move.set(0, 0); this.joyUi.base.classList.remove('on'); }
+    if (e.pointerId === this.joyId) { this.joyId = null; this.move.set(0, 0); this.joyUi.base.classList.remove('on', 'run'); }
     if (e.pointerId === this.lookId) this.lookId = null;
   };
 
@@ -133,28 +140,80 @@ export class Walker {
     if (!this.active) return;
     const k = this.keys;
     const mv = this.move.clone();
-    if (k.has('z') || k.has('w') || k.has('arrowup')) mv.y -= 1;
-    if (k.has('s') || k.has('arrowdown')) mv.y += 1;
-    if (k.has('q') || k.has('a') || k.has('arrowleft')) mv.x -= 1;
-    if (k.has('d') || k.has('arrowright')) mv.x += 1;
-    if (mv.length() > 1) mv.normalize();
-    const speed = 3.2 * (k.has('shift') ? 1.7 : 1);
+    let kb = false;
+    if (k.has('z') || k.has('w') || k.has('arrowup')) { mv.y -= 1; kb = true; }
+    if (k.has('s') || k.has('arrowdown')) { mv.y += 1; kb = true; }
+    if (k.has('q') || k.has('a') || k.has('arrowleft')) { mv.x -= 1; kb = true; }
+    if (k.has('d') || k.has('arrowright')) { mv.x += 1; kb = true; }
+    let mag = Math.min(1, mv.length());
+    if (mag > 0) mv.normalize();
+    // joystick : à moitié = marche, à fond = course · clavier : Maj = course
+    const running = kb ? k.has('shift') : mag > .9;
+    if (kb) mag = running ? 1 : .8;
+    const target = mag < .12 ? 0 : running ? 4.2 : 1.9 * Math.min(1, mag / .8);
+    this.speed += (target - this.speed) * Math.min(1, dt * (target > this.speed ? 6 : 10));
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const step = fwd.multiplyScalar(-mv.y * speed * dt).add(right.multiplyScalar(mv.x * speed * dt));
+    const dir = fwd.multiplyScalar(-mv.y).add(right.multiplyScalar(mv.x));
+    if (mag >= .12) {
+      const want = Math.atan2(dir.x, dir.z);
+      const d = Math.atan2(Math.sin(want - this.bodyYaw), Math.cos(want - this.bodyYaw));
+      this.bodyYaw += d * Math.min(1, dt * 11);
+    }
+    // on avance surtout dans la direction du corps (virages naturels)
+    const face = new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw));
+    const step = face.multiplyScalar(this.speed * dt);
+    const x0 = this.pos.x, z0 = this.pos.z;
     this.tryMove(step.x, 0, w); this.tryMove(0, step.z, w);
-    const moving = step.length() > 1e-4;
-    this.bob += moving ? dt * 7.5 : 0;
-    this.cam.position.set(this.pos.x, this.pos.y + (moving ? Math.sin(this.bob) * .025 : 0), this.pos.z);
-    const f = fitFov(62, this.cam.aspect);
+    const real = dt > 0 ? Math.hypot(this.pos.x - x0, this.pos.z - z0) / dt : 0;
+    if (real < this.speed * .3) this.speed = Math.max(real, this.speed * .5);
+    if (this.body) {
+      this.body.holder.position.copy(this.pos);
+      this.body.holder.rotation.y = this.bodyYaw;
+      this.body.animate(real, dt);
+    }
+    this.placeCamera(dt, w);
+  }
+
+  private placeCamera(dt: number, w: World) {
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    const look = new THREE.Vector3(-Math.sin(this.yaw) * cp, -sp, -Math.cos(this.yaw) * cp);
+    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const head = new THREE.Vector3(this.pos.x, 1.58, this.pos.z);
+    // épaule droite, puis recul jusqu'au premier obstacle
+    const sh = this.march(head, right, .42, w);
+    const shoulder = head.clone().addScaledVector(right, sh);
+    const want = this.march(shoulder, look.clone().negate(), 2.6, w);
+    this.dist += (want - this.dist) * Math.min(1, dt * (want < this.dist ? 18 : 4));
+    const c = shoulder.clone().addScaledVector(look, -this.dist);
+    c.y = Math.max(.35, Math.min(2.85, c.y));
+    this.cam.position.copy(c);
+    this.cam.lookAt(shoulder.addScaledVector(look, 3).setY(shoulder.y + .3));
+    const f = fitFov(60, this.cam.aspect);
     if (this.cam.fov !== f) { this.cam.fov = f; this.cam.updateProjectionMatrix(); }
-    this.cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+  }
+  /** Distance libre depuis o dans la direction d (murs = hors des zones praticables, meubles). */
+  private march(o: THREE.Vector3, d: THREE.Vector3, max: number, w: World) {
+    const m = .28;
+    for (let t = .1; t <= max + 1e-6; t += .1) {
+      const x = o.x + d.x * t, z = o.z + d.z * t;
+      const inside = w.walk ? w.walk.some(b => x >= b[0] - m && x <= b[2] + m && z >= b[1] - m && z <= b[3] + m) : true;
+      const y = o.y + d.y * t;
+      const hit = y < 2.6 && (w.solids ?? []).some(s => x > s[0] + .05 && x < s[2] - .05 && z > s[1] + .05 && z < s[3] - .05);
+      if (!inside || hit) return Math.max(.15, t - .25);
+    }
+    return max;
   }
   private tryMove(dx: number, dz: number, w: World) {
-    const r = .32, nx = this.pos.x + dx, nz = this.pos.z + dz;
-    if (w.walk) { if (!w.walk.some(b => nx >= b[0] && nx <= b[2] && nz >= b[1] && nz <= b[3])) return; }
-    else { const b = w.bounds; if (b && (nx < b[0] || nx > b[2] || nz < b[1] || nz > b[3])) return; }
-    for (const s of w.solids ?? []) if (nx > s[0] - r && nx < s[2] + r && nz > s[1] - r && nz < s[3] + r) return;
+    const r = .3, nx = this.pos.x + dx, nz = this.pos.z + dz;
+    const blocked = (x: number, z: number) => {
+      if (w.walk) { if (!w.walk.some(b => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3])) return true; }
+      else { const b = w.bounds; if (b && (x < b[0] || x > b[2] || z < b[1] || z > b[3])) return true; }
+      for (const s of w.solids ?? []) if (x > s[0] - r && x < s[2] + r && z > s[1] - r && z < s[3] + r) return true;
+      return false;
+    };
+    // si l'on est déjà coincé (apparition dans un meuble), on laisse sortir
+    if (blocked(nx, nz) && !blocked(this.pos.x, this.pos.z)) return;
     this.pos.x = nx; this.pos.z = nz;
   }
 }

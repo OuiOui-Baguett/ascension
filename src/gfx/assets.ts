@@ -25,7 +25,7 @@ export const CHAR_IDS = ['Business_Male_01', 'Business_Male_02', 'Business_Male_
   'Business_Female_01', 'Business_Female_02', 'Female_Party_02', 'Security_Male_01'];
 export const ANIM_IDS = ['m_idle_neutral_01', 'm_idle_neutral_02', 'f_idle_neutral_01', 'm_sit_table_idle_neutral_01', 'm_sit_table_idle_neutral_02',
   'f_sit_table_idle_neutral_01', 'm_sit_chair_idle_neutral_01', 'f_sit_chair_idle_neutral_01', 'm_drink_idle', 'f_drink_drinking',
-  'm_gestic_talk_neutral_01', 'f_gestic_talk_neutral_01', 'm_walk_neutral_01', 'f_walk_neutral_01', 'm_walk_stroll_01'];
+  'm_gestic_talk_neutral_01', 'f_gestic_talk_neutral_01', 'm_walk_neutral_01', 'f_walk_neutral_01', 'm_walk_stroll_01', 'm_run_slow_01', 'f_run_slow_01'];
 export const TEX_IDS = ['asphalt_02', 'concrete_pavement', 'brick_wall_10', 'marble_01', 'dark_paneled_wood', 'velour_velvet', 'granite_tile'];
 
 // Version publiée : l'hébergeur ne sert pas .glb/.hdr → livrés en JSON base64.

@@ -1,6 +1,6 @@
 // ============================================================
-// LE CASSE — test de rendu : écran d'accueil (rue sous la pluie), cinématique
-// d'entrée, hall du Grand Casino en marche libre.
+// LE CASSE — écran d'accueil (rue sous la pluie), parties par code, cinématique
+// d'entrée, puis tout le monde dans le Grand Casino, en vue à l'épaule.
 // ============================================================
 import './safe-storage';
 import '@fontsource/bebas-neue/latin-400.css';
@@ -20,6 +20,12 @@ import { buildHall } from './world/hall';
 import type { World } from './world/world';
 import { Director, Rail, Walker } from './cam';
 import { startAudio, setMode, setMuted, isMuted } from './audio';
+import { Net, LOCAL } from './net';
+import { Body, Remotes, CHARACTER } from './player';
+import type { ServerMsg } from '../shared/protocol';
+
+type Lobby = Extract<ServerMsg, { t: 'lobby' }>;
+type Night = Extract<ServerMsg, { t: 'started' }>;
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
 const params = new URLSearchParams(location.search);
@@ -57,6 +63,7 @@ async function start() {
   fade(0, 1.4);
   if (view === 'hall') startExplore();
   else showTitle();
+  if (pendingNight) { const n = pendingNight; pendingNight = null; onStarted(n); }
 }
 
 async function ensureHall() {
@@ -92,6 +99,7 @@ function showTitle() {
   state = 'title';
   document.body.classList.remove('cine');
   if (!params.has('clean')) $('#title').classList.remove('hidden');
+  renderMenu();
   $('#hud').classList.add('hidden');
   $('#skip').classList.add('hidden');
   $('#sub').textContent = '';
@@ -121,6 +129,7 @@ async function enterCasino() {
     setMode('hall');
     state = 'cine';
     $('#skip').classList.remove('hidden');
+    setupNight();
     director.play(hall!.shots, false, startExplore);
     fade(0, .9);
   });
@@ -134,28 +143,188 @@ function startExplore() {
   const go = () => {
     document.body.classList.remove('cine');
     $('#skip').classList.add('hidden');
-    $('#sub').textContent = '';
+    clearInterval(typeTimer); $('#sub').textContent = '';
     $('#hud').classList.remove('hidden');
     setTimeout(() => $('#help').classList.add('hidden'), 6000);
     setDof(false);
-    walker.place(hall!);
+    setupNight();
+    const me = night?.pos.find(p => p[0] === net.id);
+    const sp = hall!.spawn!.pos;
+    walker.place(me ? me[1] : sp[0], me ? me[2] : sp[2], Math.PI);
     walker.active = true;
+    const av = night?.players.find(p => p.id === net.id)?.avatar;
+    if (av && !night?.rejoin) toast(`Ce soir, tu joues`, CHARACTER[av] ?? '');
   };
   if (fromCine) { fade(1, .35).then(() => { go(); fade(0, .6); }); } else go();
 }
 
 async function backToStreet() {
-  if (state !== 'explore') return;
   walker.active = false;
+  teardownNight();
   await fade(1, .5);
   switchTo(street);
   showTitle();
   fade(0, .9);
 }
 
+// ---------- réseau : salon et nuit ----------
+const net = new Net();
+let lobby: Lobby | null = null, night: Night | null = null, pendingNight: Night | null = null;
+let remotes: Remotes | null = null, myBody: Body | null = null, nightSeed = -1;
+
+net.onStatus = s => {
+  const el = $('#net');
+  el.textContent = s === 'connecting' ? 'Connexion au serveur…' : 'Connexion perdue — on réessaie…';
+  el.classList.toggle('hidden', s === 'online' || state === 'loading');
+};
+net.onMsg = m => {
+  switch (m.t) {
+    case 'lobby':
+      lobby = m;
+      if (m.phase === 'night' && night) remotes?.sync(m.players, net.id);
+      if (m.phase === 'lobby' && night) { night = null; }
+      renderMenu(); updateBadge();
+      break;
+    case 'started': onStarted(m); break;
+    case 'snap': remotes?.snap(m.p, net.id); break;
+    case 'gone': remotes?.remove(m.id); break;
+    case 'left': lobby = null; night = null; if (state === 'explore' || state === 'cine') backToStreet(); else renderMenu(); break;
+    case 'error': showError(m.msg); break;
+  }
+};
+
+function onStarted(m: Night) {
+  if (state === 'loading') { pendingNight = m; return; }
+  const same = m.seed === nightSeed;
+  night = m;
+  if (same && (state === 'explore' || state === 'cine' || state === 'enter')) {
+    // simple reconnexion : on garde sa position, on remet les autres à jour
+    remotes?.sync(m.players, net.id);
+    return;
+  }
+  nightSeed = m.seed;
+  if (m.rejoin) {
+    // retour en pleine nuit (page rechargée) : directement dans le casino
+    (async () => {
+      $('#title').classList.add('hidden'); director.stop();
+      await fade(1, .3); await ensureHall(); switchTo(hall!); setMode('hall');
+      teardownNight(); state = 'cine'; startExplore(); fade(0, .8);
+    })();
+  } else if (state === 'title') { teardownNight(); enterCasino(); }
+}
+
+/** Crée les corps des joueurs dans le casino (une fois par nuit). */
+function setupNight() {
+  if (!night || !hall || myBody) return;
+  remotes = new Remotes(hall.scene);
+  remotes.sync(night.players, net.id);
+  for (const [id, x, z, yaw] of night.pos) remotes.place(id, x, z, yaw);
+  const me = night.players.find(p => p.id === net.id);
+  if (me?.avatar) {
+    myBody = new Body(me.avatar, null, hall.scene);
+    const p = night.pos.find(q => q[0] === net.id);
+    if (p) { myBody.holder.position.set(p[1], 0, p[2]); myBody.holder.rotation.y = Math.PI; myBody.animate(0, 0); }
+    walker.body = myBody;
+  }
+  updateBadge();
+}
+function teardownNight() {
+  remotes?.clear(); remotes = null;
+  myBody?.dispose(); myBody = null; walker.body = null;
+}
+
+// envoi de sa position au serveur, ~15 fois par seconde
+let sendAcc = 0, lastSent = '', lastSentAt = 0;
+function sendInput(dt: number, now: number) {
+  sendAcc += dt;
+  if (sendAcc < .066 || !night || state !== 'explore') return;
+  sendAcc = 0;
+  const x = +walker.pos.x.toFixed(2), z = +walker.pos.z.toFixed(2), yaw = +walker.bodyYaw.toFixed(2);
+  const mv = walker.speed > 2.5 ? 2 : walker.speed > .2 ? 1 : 0;
+  const key = `${x},${z},${yaw},${mv}`;
+  if (key === lastSent && now - lastSentAt < 1000) return;
+  lastSent = key; lastSentAt = now;
+  net.send({ t: 'input', x, z, yaw, mv });
+}
+
+function renderMenu() {
+  const inLobby = !!lobby;
+  $('#v-home').classList.toggle('hidden', inLobby);
+  $('#v-lobby').classList.toggle('hidden', !inLobby);
+  $('#join-row').style.display = LOCAL ? 'none' : '';
+  $('#home-note').innerHTML = LOCAL
+    ? 'Version d\'aperçu : pas de serveur ici, tu joues avec des bots. Pour jouer à plusieurs, il faut la version hébergée.<br>Personnages : Microsoft Rocketbox (MIT)'
+    : 'Crée une partie et envoie le code à tes potes, ou entre le leur.<br>Personnages : Microsoft Rocketbox (MIT)';
+  if (!lobby) return;
+  const host = lobby.host === net.id;
+  $('.dossier').classList.toggle('guest', !host);
+  $('#l-code').textContent = LOCAL ? 'SOLO' : lobby.code;
+  $('#l-players').innerHTML = lobby.players.map(p =>
+    `<li class="${p.online ? '' : 'off'} ${p.id === net.id ? 'me' : ''}">${p.id === lobby!.host ? '★ ' : ''}${esc(p.name)}${p.id === net.id ? ' <i>toi</i>' : ''}${p.bot ? ' <i>bot</i>' : ''}${p.online ? '' : ' <i>déco</i>'}</li>`).join('');
+  $('#l-ind').textContent = String(lobby.settings.indics);
+  document.querySelectorAll<HTMLButtonElement>('#l-dur button').forEach(b => b.classList.toggle('on', b.dataset.d === lobby!.settings.duree));
+  ($('#start') as HTMLButtonElement).style.display = host ? '' : 'none';
+  ($('#addbot') as HTMLButtonElement).style.display = host ? '' : 'none';
+  ($('#addbot') as HTMLButtonElement).disabled = lobby.players.length >= 8;
+  const n = lobby.players.length;
+  const hostName = lobby.players.find(p => p.id === lobby!.host)?.name ?? 'l\'hôte';
+  $('#l-note').textContent = !host ? `En attente que ${hostName} lance la nuit…`
+    : n < 3 ? `${n} joueur${n > 1 ? 's' : ''} : il en faut 3 pour une vraie partie. Pour tester, tu peux lancer quand même ou ajouter des bots.`
+    : `Équipe au complet ? Lance la nuit. Les indics restent secrets (rôles à l'étape suivante).`;
+}
+function updateBadge() {
+  const n = lobby?.players.length ?? 0;
+  $('#badge').innerHTML = lobby ? `${LOCAL ? 'Aperçu solo' : 'Partie ' + lobby.code} · ${n} joueur${n > 1 ? 's' : ''}` : '';
+}
+const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+let errTimer = 0;
+function showError(msg: string) {
+  const el = $('#err'); el.textContent = msg; el.classList.remove('hidden');
+  clearTimeout(errTimer); errTimer = window.setTimeout(() => el.classList.add('hidden'), 3500);
+}
+let toastTimer = 0;
+function toast(line: string, big: string) {
+  const el = $('#toast'); el.innerHTML = `${line}<b>${esc(big)}</b>`; el.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = window.setTimeout(() => el.classList.remove('on'), 3800);
+}
+
 // ---------- interface ----------
-$('#go').onclick = () => enterCasino();
-$('#back').onclick = () => backToStreet();
+const nameInput = $('#name') as HTMLInputElement, codeInput = $('#code') as HTMLInputElement;
+nameInput.value = net.name;
+function takeName() {
+  let n = nameInput.value.trim();
+  if (!n) { n = 'Joueur ' + (10 + Math.floor(Math.random() * 90)); nameInput.value = n; }
+  if (n !== net.name) net.setName(n);
+}
+$('#create').onclick = () => { startAudio(); takeName(); net.send({ t: 'create' }); };
+$('#join').onclick = () => {
+  startAudio();
+  const code = codeInput.value.trim().toUpperCase();
+  if (code.length !== 4) { showError('Le code fait 4 lettres.'); codeInput.focus(); return; }
+  takeName(); net.send({ t: 'join', code });
+};
+codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') $('#join').click(); });
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
+nameInput.addEventListener('change', () => { if (nameInput.value.trim()) net.setName(nameInput.value.trim()); });
+document.querySelectorAll<HTMLButtonElement>('[data-ind]').forEach(b => b.onclick = () => {
+  if (lobby) net.send({ t: 'settings', indics: lobby.settings.indics + +b.dataset.ind! });
+});
+document.querySelectorAll<HTMLButtonElement>('#l-dur button').forEach(b => b.onclick = () => net.send({ t: 'settings', duree: b.dataset.d as any }));
+$('#addbot').onclick = () => net.send({ t: 'bot' });
+$('#start').onclick = () => { startAudio(); net.send({ t: 'start' }); };
+$('#leave').onclick = () => net.send({ t: 'leave' });
+let quitArmed = 0;
+$('#back').onclick = () => {
+  // deux appuis pour quitter : pas de sortie accidentelle en pleine nuit
+  if (!quitArmed) {
+    $('#back').textContent = 'Sûr ? Quitter la partie';
+    quitArmed = window.setTimeout(() => { quitArmed = 0; $('#back').textContent = 'Quitter'; }, 3000);
+    return;
+  }
+  clearTimeout(quitArmed); quitArmed = 0; $('#back').textContent = 'Quitter';
+  net.send({ t: 'leave' });
+};
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') net.wake(); });
 $('#snd').onclick = () => { startAudio(); setMuted(!isMuted()); $('#snd b').textContent = isMuted() ? 'Non' : 'Oui'; };
 $('#q').onclick = () => {
   const order: ('auto' | Quality)[] = ['auto', 'high', 'medium', 'low'];
@@ -203,6 +372,8 @@ function frame(now: number) {
     director.update(stillN ? 1 / 30 : dt, time);
     rail.update(dt);
     walker.update(dt, world);
+    if (world === hall) { remotes?.update(dt); if (!walker.active && myBody) myBody.animate(0, dt); }
+    sendInput(dt, now);
     if (state === 'title') focusDof(director.focus, 14);
     else if (state === 'cine') focusDof(director.focus, Math.max(3, director.focus * .7));
     else if (state === 'enter') { street.enterTick?.(rail.progress); focusDof(Math.max(2, world.camera.position.distanceTo(new THREE.Vector3(0, 2.4, -21))), 7); }
@@ -215,8 +386,10 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 (window as any).__gfx = () => ({ q: getQuality(), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, state });
-(window as any).__walk = (x: number, z: number, yaw: number, pitch = 0) => { walker.pos.set(x, 1.65, z); walker.yaw = yaw; walker.pitch = pitch; };
-(window as any).__enter = () => enterCasino();
+(window as any).__walk = (x: number, z: number, yaw: number, pitch = .2) => { walker.pos.set(x, 0, z); walker.yaw = yaw; walker.pitch = pitch; walker.bodyYaw = yaw + Math.PI; };
+(window as any).__net = () => ({ id: net.id, status: net.status, lobby, night: !!night, remotes: remotes?.map.size ?? 0, me: [walker.pos.x, walker.pos.z], state });
+(window as any).__keys = walker.keys;
+(window as any).__remote = (id: string) => { const r = remotes?.map.get(id); return r && [+r.body.holder.position.x.toFixed(2), +r.body.holder.position.z.toFixed(2), +r.body.speed.toFixed(2)]; };
 (window as any).__railAt = (k: number) => {
   if (world !== street) switchTo(street);
   director.stop(); state = 'enter'; $('#title').classList.add('hidden'); document.body.classList.add('cine');
@@ -236,4 +409,5 @@ requestAnimationFrame(frame);
   state = 'cine'; walker.active = false; $('#hud').classList.add('hidden'); document.body.classList.add('cine');
   const s = hall!.shots[i]; director.play([{ ...s, from: s.to, dur: 9999 }], true); setDof(getQuality() !== 'low');
 };
+net.connect();
 start();

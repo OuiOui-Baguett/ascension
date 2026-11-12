@@ -11,7 +11,8 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: #050507; overflow: hidden; color: var(--cream); font-family: 'Special Elite', 'Courier New', monospace; overscroll-behavior: none; }
 canvas#c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
-.hidden { opacity: 0 !important; pointer-events: none !important; }
+.hidden, .hidden * { pointer-events: none !important; }
+.hidden { opacity: 0 !important; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 
 /* ---------- chargement ---------- */
@@ -54,7 +55,47 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .dossier nav button.primary { background: #1b1410; color: var(--cream); font: 26px 'Bebas Neue', Impact, sans-serif; letter-spacing: .12em; padding: 12px 16px 9px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 6px 0 #0b0806, 0 10px 18px rgba(0,0,0,.35); }
 .dossier nav button.primary s { text-decoration: none; color: var(--gold); }
 .dossier nav button.primary:active { transform: translateY(3px); box-shadow: 0 3px 0 #0b0806; }
-.note { font-size: 11px; opacity: .55; margin-top: 12px; letter-spacing: .06em; }
+.note { font-size: 11px; opacity: .6; margin-top: 12px; letter-spacing: .06em; line-height: 1.45; }
+
+/* ---------- menu & salon ---------- */
+.view { transition: opacity .3s; }
+.view.hidden { display: none; }
+.field { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; }
+.field span { opacity: .65; white-space: nowrap; }
+.dossier input { font: inherit; color: #1b1410; background: rgba(255,255,255,.35); border: 0; border-bottom: 2px solid #1b1410; padding: 7px 8px 5px; border-radius: 2px 2px 0 0; outline: none; min-width: 0; font-size: 16px; }
+.dossier input:focus { background: rgba(255,255,255,.6); }
+.field input { flex: 1; }
+.join { display: flex; gap: 6px; margin-top: 6px; }
+.join input { width: 92px; text-transform: uppercase; letter-spacing: .3em; text-align: center; font-family: 'Bebas Neue', Impact, sans-serif; font-size: 24px; padding: 4px 4px 1px; }
+.join button { flex: 1; border: 2px solid #1b1410 !important; font: 20px 'Bebas Neue', Impact, sans-serif !important; letter-spacing: .12em !important; text-align: center !important; }
+.dossier .row { display: flex; gap: 4px; }
+.dossier .row button { flex: 1; font-size: 13px !important; padding: 8px 6px !important; text-align: center !important; }
+.dossier button:disabled { opacity: .35; pointer-events: none; }
+.code { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px dashed rgba(60,40,20,.35); padding: 0 0 6px; margin: 30px 0 0; }
+.code span { font-size: 12px; opacity: .65; }
+.code b { font: 44px/1 'Bebas Neue', Impact, sans-serif; letter-spacing: .22em; color: #1b1410; user-select: all; }
+#l-players { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; font-size: 14px; }
+#l-players li { padding: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px dotted rgba(60,40,20,.25); }
+#l-players li.off { opacity: .4; }
+#l-players li.me { font-weight: bold; }
+#l-players li i { font-style: normal; color: #8a1a12; margin-left: 4px; font-size: 11px; }
+.sets { margin-top: 10px; display: grid; gap: 6px; }
+.set { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.set span { opacity: .65; }
+.step, .seg { display: flex; align-items: center; gap: 2px; }
+.step b { min-width: 30px; text-align: center; font: 24px 'Bebas Neue', Impact, sans-serif; }
+.step button, .seg button { padding: 5px 10px; font-size: 13px; border: 1.5px solid rgba(27,20,16,.6); border-radius: 2px; }
+.step button { font-size: 16px; padding: 2px 11px; }
+.seg button.on { background: #1b1410; color: var(--cream); border-color: #1b1410; }
+.dossier.guest .step button, .dossier.guest .seg button:not(.on) { opacity: .35; pointer-events: none; }
+
+#net, #err { position: fixed; left: 50%; top: calc(12px + var(--safe-t)); transform: translateX(-50%); z-index: 45; padding: 8px 16px; font-size: 13px; letter-spacing: .06em; background: rgba(20,10,8,.85); border: 1px solid rgba(217,164,65,.5); border-radius: 3px; transition: opacity .3s; }
+#err { top: auto; bottom: calc(18px + var(--safe-b)); border-color: rgba(255,90,72,.7); color: #ffd9cf; }
+#badge { position: absolute; top: calc(58px + var(--safe-t)); left: 16px; font-size: 12px; letter-spacing: .12em; opacity: .75; text-shadow: 0 1px 6px #000; }
+#toast { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); text-align: center; font: italic clamp(20px, 3.4vw, 30px) 'Playfair Display', Georgia, serif; color: #f4ead2; text-shadow: 0 2px 16px #000; opacity: 0; transition: opacity 1s; width: 90vw; }
+#toast b { display: block; font: normal clamp(38px, 7vw, 64px)/1 'Bebas Neue', Impact, sans-serif; letter-spacing: .08em; color: var(--gold); margin-top: 6px; }
+#toast.on { opacity: 1; }
+#joy.run { border-color: rgba(217,164,65,.9); }
 
 @media (max-width: 700px), (max-height: 520px) and (orientation: landscape) {
   #title::before { background: linear-gradient(180deg, rgba(4,4,8,.7), rgba(4,4,8,0) 45%, rgba(4,4,8,.7) 80%); }
@@ -80,7 +121,7 @@ body.cine #bars i { transform: none; }
 /* ---------- exploration ---------- */
 #hud { position: fixed; inset: 0; z-index: 15; pointer-events: none; transition: opacity .8s; }
 #back { position: absolute; top: calc(14px + var(--safe-t)); left: 14px; pointer-events: auto; padding: 9px 14px; font-size: 13px; letter-spacing: .1em; background: rgba(10,8,8,.55); border: 1px solid rgba(217,164,65,.45); color: var(--cream); border-radius: 3px; backdrop-filter: blur(6px); }
-#help { position: absolute; left: 50%; top: calc(18px + var(--safe-t)); transform: translateX(-50%); font-size: 12px; letter-spacing: .08em; opacity: .75; text-align: center; transition: opacity 1.5s; text-shadow: 0 1px 6px #000; width: 70vw; }
+#help { position: absolute; left: 50%; bottom: calc(22px + var(--safe-b)); transform: translateX(-50%); font-size: 12px; letter-spacing: .08em; opacity: .75; text-align: center; transition: opacity 1.5s; text-shadow: 0 1px 6px #000; width: 70vw; }
 #joy { position: absolute; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 1.5px solid rgba(241,227,196,.35); background: radial-gradient(circle, rgba(0,0,0,.25), rgba(0,0,0,.05)); opacity: 0; transition: opacity .2s; }
 #joy.on { opacity: 1; }
 #joy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; border-radius: 50%; background: rgba(241,227,196,.85); transform: translate(-50%,-50%); box-shadow: 0 2px 12px rgba(0,0,0,.5); }
