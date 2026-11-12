@@ -365,13 +365,26 @@ export function buildHall(renderer: THREE.WebGLRenderer, quality: string): World
       c.fillStyle = '#2a140a'; c.beginPath(); c.arc(0, 0, R * .26, 0, 7); c.fill();
       c.fillStyle = '#d4a64a'; c.font = 'italic 48px "Playfair Display"'; c.textAlign = 'center'; c.fillText('Fortune', 0, 16);
     });
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.8, 72), new THREE.MeshStandardMaterial({ map: wt, roughness: .35, metalness: .15 }));
-    disc.position.set(0, 2.55, 0); g.add(disc);
+    // la roue a une épaisseur et un dos décoré : elle se regarde sous tous les angles
+    const disc = new THREE.Group(); disc.position.set(0, 2.55, 0); g.add(disc);
+    disc.add(new THREE.Mesh(new THREE.CircleGeometry(1.8, 72), new THREE.MeshStandardMaterial({ map: wt, roughness: .35, metalness: .15 })));
+    disc.add(new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, .16, 72, 1, true).rotateX(Math.PI / 2).translate(0, 0, -.081), MAT.lacquer('#2a140a', .35)));
+    const backT = canvasTex(512, 512, (c, w) => {
+      const R = w / 2; c.translate(R, R);
+      c.fillStyle = '#1e0e06'; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill();
+      c.strokeStyle = '#c99a45'; c.lineWidth = 3;
+      for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; c.beginPath(); c.moveTo(Math.cos(a) * R * .3, Math.sin(a) * R * .3); c.lineTo(Math.cos(a) * R * .94, Math.sin(a) * R * .94); c.stroke(); }
+      for (const r of [.3, .62, .94]) { c.beginPath(); c.arc(0, 0, R * r, 0, 7); c.stroke(); }
+      c.fillStyle = '#d9a441'; c.textAlign = 'center'; c.font = 'italic 54px "Playfair Display"'; c.fillText('Grand', 0, -6); c.font = '30px "Bebas Neue"'; (c as any).letterSpacing = '8px'; c.fillText('CASINO', 0, 34);
+    });
+    const back = new THREE.Mesh(new THREE.CircleGeometry(1.8, 72), new THREE.MeshStandardMaterial({ map: backT, roughness: .4, metalness: .3 }));
+    back.rotation.y = Math.PI; back.position.z = -.162; disc.add(back);
     const pts: THREE.Vector3[] = [];
     for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * 1.98, 2.55 + Math.sin(a) * 1.98, .04)); }
     g.add(bulbs(pts, '#ffd9a0', { size: .05, speed: 9, period: 4, power: 7 }));
     const ws = neonPlane(neonTex('LA GRANDE ROUE', '120px Monoton', '#ffcf5a', 2048, 220, { tube: 6 }), 4.2, .45, '#ffe2a0', 2.6);
     ws.position.set(0, 4.95, 0); g.add(ws);
+    const ws2 = ws.clone(); ws2.rotation.y = Math.PI; ws2.position.z = -.02; g.add(ws2);
     let spin = .25;
     onTick((t, dt) => { if (Math.sin(t * .11) > .985) spin = 3.5; spin += (.25 - spin) * dt * .35; disc.rotation.z -= spin * dt; });
     solids.push([-2.1, -2.1, 2.1, 2.1]);

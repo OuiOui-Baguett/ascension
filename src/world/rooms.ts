@@ -55,8 +55,11 @@ export function buildRooms(root: THREE.Object3D, statics: THREE.Object3D, mirror
     pendant(k, root, 23.6, 0, 2.4, 1.1, 0, 2.25, H, .8);
     // cheminée en marbre, feu animé
     const marble = pbr('marble_01', { color: '#e8dccb' }); marble.roughness = .35;
-    k.add(marble, box(.5, 1.5, 2.6, x1 - .3, .75, 0, 1), box(.6, .12, 2.9, x1 - .32, 1.56, 0, 1));
-    k.add(M.black, box(.3, 1.0, 1.6, x1 - .2, .55, 0));
+    // encadrement ouvert : deux jambages, un linteau, une tablette, un âtre — et un vrai foyer en retrait
+    k.add(marble, box(.45, 1.35, .42, x1 - .32, .675, -1.06, 1), box(.45, 1.35, .42, x1 - .32, .675, 1.06, 1),
+      box(.48, .3, 2.55, x1 - .33, 1.2, 0, 1), box(.62, .08, 2.9, x1 - .38, 1.39, 0, 1), box(.9, .05, 2.5, x1 - .5, .025, 0, 1));
+    k.add(MAT.matte('#0b0806', .95), box(.06, 1.05, 1.72, x1 - .12, .53, 0), box(.36, 1.05, .05, x1 - .3, .53, -.86), box(.36, 1.05, .05, x1 - .3, .53, .86), box(.36, .05, 1.72, x1 - .3, 1.03, 0));
+    k.add(M.black, ...[-.6, -.3, 0, .3, .6].map(z2 => box(.3, .025, .025, x1 - .3, .09, z2)));
     const fireT = canvasTex(128, 256, (c, w, h) => {
       const g = c.createRadialGradient(w / 2, h, 4, w / 2, h * .7, h * .7);
       g.addColorStop(0, 'rgba(255,240,180,1)'); g.addColorStop(.3, 'rgba(255,150,40,.9)'); g.addColorStop(.7, 'rgba(200,40,0,.4)'); g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -65,11 +68,11 @@ export function buildRooms(root: THREE.Object3D, statics: THREE.Object3D, mirror
     const fireM = new THREE.MeshBasicMaterial({ map: fireT, color: new THREE.Color(3, 2.2, 1.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
     const flames: THREE.Mesh[] = [];
     for (let i = 0; i < 5; i++) {
-      const f = new THREE.Mesh(new THREE.PlaneGeometry(.55, .8), fireM); f.rotation.y = -Math.PI / 2;
-      f.position.set(x1 - .32 - i * .01, .45, -.5 + i * .25); root.add(f); flames.push(f);
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(.42, .6), fireM); f.rotation.y = -Math.PI / 2;
+      f.position.set(x1 - .26 - i * .012, .4, -.44 + i * .22); root.add(f); flames.push(f);
     }
-    onTick((t) => flames.forEach((f, i) => { f.scale.y = .8 + .35 * Math.abs(Math.sin(t * (5 + i) + i * 1.7)); f.position.y = .3 + f.scale.y * .32; }));
-    k.add(MAT.matte('#2a1408', .9), cyl(.07, .07, 1.1, 0, 0, 0, 8).rotateX(Math.PI / 2).translate(x1 - .3, .15, 0), cyl(.07, .07, 1.0, 0, 0, 0, 8).rotateX(Math.PI / 2).rotateY(.3).translate(x1 - .33, .26, 0));
+    onTick((t) => flames.forEach((f, i) => { f.scale.y = .75 + .35 * Math.abs(Math.sin(t * (5 + i) + i * 1.7)); f.position.y = .12 + f.scale.y * .3; }));
+    k.add(MAT.matte('#2a1408', .9), cyl(.07, .07, 1.1, 0, 0, 0, 8).rotateX(Math.PI / 2).translate(x1 - .3, .16, 0).scale(1, 1, .7), cyl(.06, .06, .8, 0, 0, 0, 8).rotateX(Math.PI / 2).rotateY(.3).translate(x1 - .3, .27, 0));
     // fauteuils devant le feu, guéridon, verres
     const leatherGreen = (m: THREE.MeshStandardMaterial) => { const c = m.clone(); c.color.set('#3a6a52'); return c; };
     for (const z of [-1.6, 1.6]) {
@@ -86,8 +89,10 @@ export function buildRooms(root: THREE.Object3D, statics: THREE.Object3D, mirror
     });
     for (const [z, rot, s] of [[z0 + .12, 0, 0], [z1 - .12, Math.PI, 1]] as const) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5), new THREE.MeshStandardMaterial({ map: painting(s), roughness: .6 }));
-      p.position.set(25, 2.6, z + (rot ? -.03 : .03)); p.rotation.y = rot; statics.add(p);
-      k.add(M.gold, box(2.6, 1.7, .06, 25, 2.6, z));
+      const out = rot ? -1 : 1;
+      p.position.set(25, 2.6, z + out * .07); p.rotation.y = rot; statics.add(p);
+      k.add(MAT.matte('#140c08', .8), box(2.5, 1.6, .04, 25, 2.6, z + out * .03));
+      k.add(M.gold, box(2.64, .1, .1, 25, 3.37, z + out * .06), box(2.64, .1, .1, 25, 1.83, z + out * .06), box(.1, 1.64, .1, 23.73, 2.6, z + out * .06), box(.1, 1.64, .1, 26.27, 2.6, z + out * .06));
       root.add(lightPool(2.8, 2.8, 25, .02, z + (rot ? -1.2 : 1.2), .08));
     }
     // enseigne au-dessus de l'entrée, côté hall

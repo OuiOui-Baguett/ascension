@@ -205,8 +205,9 @@ export function buildWest(root: THREE.Object3D, statics: THREE.Object3D, mirror:
     k.add(safe, box(.08, .8, .8, x1 - .1, 1.4, -19));
     k.add(M.chrome, cyl(.12, .12, .05, 0, 0, 0, 20).rotateZ(Math.PI / 2).translate(x1 - .16, 1.45, -19), box(.03, .2, .03, x1 - .18, 1.2, -18.8));
     const portrait = canvasTex(256, 320, (c, w, h) => { const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#3a2a1a'); g.addColorStop(1, '#120a06'); c.fillStyle = g; c.fillRect(0, 0, w, h); c.fillStyle = '#0a0604'; c.beginPath(); c.ellipse(w / 2, h * .42, 46, 58, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(w * .2, h); c.quadraticCurveTo(w / 2, h * .5, w * .8, h); c.fill(); c.fillStyle = 'rgba(200,160,110,.25)'; c.beginPath(); c.ellipse(w / 2 + 10, h * .4, 30, 40, 0, 0, 7); c.fill(); });
-    const pm = new THREE.Mesh(new THREE.PlaneGeometry(1, 1.25), new THREE.MeshStandardMaterial({ map: portrait, roughness: .6 })); pm.position.set(-17.6, 1.9, z0 + .17); statics.add(pm);
-    k.add(M.gold, box(1.15, 1.4, .05, -17.6, 1.9, z0 + .14));
+    const pm = new THREE.Mesh(new THREE.PlaneGeometry(1, 1.25), new THREE.MeshStandardMaterial({ map: portrait, roughness: .6 })); pm.position.set(-17.6, 1.9, z0 + .24); statics.add(pm);
+    k.add(MAT.matte('#140c08', .8), box(1.04, 1.29, .03, -17.6, 1.9, z0 + .2));
+    k.add(M.gold, box(1.16, .08, .08, -17.6, 2.56, z0 + .23), box(1.16, .08, .08, -17.6, 1.24, z0 + .23), box(.08, 1.4, .08, -18.14, 1.9, z0 + .23), box(.08, 1.4, .08, -17.06, 1.9, z0 + .23));
     plane(statics, staffSign('DIRECTION'), .9, .34, -21.32, 2.75, -20.5, -Math.PI / 2, .1);
     walk.push([-20.7, -26.5, -14.5, -15.8]);
   }
