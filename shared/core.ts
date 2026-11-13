@@ -7,6 +7,7 @@ import { PLAYER_AVATARS, MAX_PLAYERS, TICK_MS, type ClientMsg, type ServerMsg, t
 import { ITEMS, START_MONEY, TRAP_ITEMS, TRAP_LIMIT } from './items';
 import { CAISSE, ROULETTES, SLOT_LIST, slotSeat, dist2, REPERAGE_MS, HALL_RECT, inRect, losClear, MEET_SPOTS, MEET_MS, clockText } from './layout';
 import { slotSpin, SLOT_BETS, CHIPS, ROUL_PHASES, rouletteReturn, type BetKind } from './games';
+import { Watch, type WIO } from './watch';
 
 export interface Conn { send(m: ServerMsg): void }
 
@@ -16,7 +17,7 @@ interface Player {
   x: number; z: number; yaw: number; mv: number; t: number;
   bot?: { path: [number, number][]; i: number; speed: number };
   money: number; inv: Record<string, number>; seat: number; table: number; busy: number;
-  role: 'team' | 'indic'; out: boolean; usedMeet: boolean; cy: number; traps: number; nextTrap: number; wait: number;
+  role: 'team' | 'indic'; out: boolean; usedMeet: boolean; cy: number; traps: number; nextTrap: number; wait: number; tp: number;
 }
 interface Meeting { ph: 'talk' | 'vote' | 'reveal'; by: string; endsAt: number; votes: Map<string, string>; out?: Player; counts?: [string, number][] }
 interface RTable { id: number; ph: TableState['ph']; endsAt: number; bets: { p: Player; kind: BetKind; value: number; amount: number }[]; res: number; hist: number[]; wins: [string, number][]; players: Set<Player> }
@@ -25,6 +26,7 @@ interface Room {
   settings: Settings; seed: number; startedAt: number;
   prices: Record<string, number>; stock: Record<string, number>; jackpot: number; tables: RTable[]; slotOwner: Map<number, Player>;
   heat: number; paused: number; pauseAt: number; meetLeft: number; meeting: Meeting | null; nIndics: number;
+  sec: Watch | null;
 }
 
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -73,6 +75,7 @@ export class Core {
           conn.send({ t: 'role', role: p.role, n: p.room.settings.secret ? undefined : p.room.nIndics });
           this.sendState(p.room, p);
           if (p.room.meeting) conn.send({ t: 'meeting', m: this.meetState(p.room) });
+          p.room.sec?.resend(p, now);
         }
       }
       return p;
@@ -84,7 +87,7 @@ export class Core {
         this.leave(me);
         let code = '';
         do code = Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join(''); while (this.rooms.has(code));
-        const room: Room = { code, host: me.id, players: [], phase: 'lobby', settings: { indics: 1, duree: 'normale' }, seed: 0, startedAt: 0, prices: {}, stock: {}, jackpot: 0, tables: [], slotOwner: new Map(), heat: 0, paused: 0, pauseAt: 0, meetLeft: 2, meeting: null, nIndics: 0 };
+        const room: Room = { code, host: me.id, players: [], phase: 'lobby', settings: { indics: 1, duree: 'normale' }, seed: 0, startedAt: 0, prices: {}, stock: {}, jackpot: 0, tables: [], slotOwner: new Map(), heat: 0, paused: 0, pauseAt: 0, meetLeft: 2, meeting: null, nIndics: 0, sec: null };
         this.rooms.set(code, room);
         this.join(me, room);
         break;
@@ -147,6 +150,7 @@ export class Core {
           if (p.bot) { p.bot.path = BOT_PATHS[0]; p.bot.i = 0; const q = p.bot.path[0]; p.x = q[0]; p.z = q[1]; }
         }
         r.heat = 0; r.paused = 0; r.pauseAt = 0; r.meetLeft = 2; r.meeting = null;
+        r.sec = new Watch(this.io(r));
         this.broadcastLobby(r);
         for (const p of r.players) {
           p.conn?.send(this.startedMsg(r, false)); this.sendEcon(r, p);
@@ -161,7 +165,7 @@ export class Core {
         // garde-fou : on refuse un déplacement impossible (plus de 9 m/s)
         const dt = Math.max(.03, (now - me.t) / 1000), d = Math.hypot(m.x - me.x, m.z - me.z);
         if (Number.isFinite(m.cy)) me.cy = m.cy!;
-        if (me.seat >= 0 || r.meeting) { me.t = now; break; }
+        if (me.seat >= 0 || r.meeting || now < me.tp) { me.t = now; break; }
         // tolérance pour les paquets groupés ; au-delà on rapproche sans téléporter
         const allowed = 9 * dt + 1.5;
         if (d <= allowed || d > 40) { me.x = m.x; me.z = m.z; }
@@ -199,7 +203,8 @@ export class Core {
         if (!near(CAISSE.x, CAISSE.z, 3.5)) return this.err(me, 'Approche-toi du guichet.');
         if ((r.stock[it.id] ?? 0) <= 0) return this.err(me, 'Plus en stock cette nuit.');
         if (me.money < price) return this.err(me, 'Pas assez d\'argent.');
-        me.money -= price; me.inv[it.id] = (me.inv[it.id] ?? 0) + 1; r.stock[it.id]--; me.busy = now + 2000;
+        // le faux badge compte en passages (3 par badge)
+        me.money -= price; me.inv[it.id] = (me.inv[it.id] ?? 0) + (it.id === 'badge' ? 3 : 1); r.stock[it.id]--; me.busy = now + 2000;
         this.sendMe(me);
         this.all(r, { t: 'shop', prices: r.prices, stock: r.stock });
         this.all(r, { t: 'fx', k: 'env', id: me.id, c: 'white' });
@@ -260,6 +265,11 @@ export class Core {
         this.sendMe(me); this.tableOut(tb);
         break;
       }
+      case 'door': r.sec?.door(me, m.d, m.how, now); break;
+      case 'use': r.sec?.use(me, m.item, now); break;
+      case 'sleep': r.sec?.sleep(me, m.g, now); break;
+      case 'intel': r.sec?.intel(me, m.i, now); break;
+      case 'noise': r.sec?.noise(me, m.kind, now); break;
       case 'bclear': {
         const tb = r.tables[me.table];
         if (!tb || tb.ph !== 'bets') return;
@@ -308,6 +318,21 @@ export class Core {
     p.conn?.send({ t: 'jack', v: r.jackpot });
   }
   private err(p: Player, msg: string) { p.conn?.send({ t: 'error', msg }); }
+  /** Ce dont la surveillance des zones privées a besoin pour agir sur la partie. */
+  private io(r: Room): WIO {
+    return {
+      send: (p, m) => (p as Player).conn?.send(m), all: m => this.all(r, m), err: (p, msg) => this.err(p as Player, msg),
+      others: (p, m) => { for (const q of r.players) if (q !== p) q.conn?.send(m); },
+      me: p => this.sendMe(p as Player),
+      heat: (p, base) => {
+        if (r.phase !== 'night') return;
+        r.heat = Math.min(100, r.heat + (p?.inv.gants ? Math.ceil(base / 2) : base));
+        for (const q of r.players) this.sendState(r, q);
+        this.checkEnd(r, Date.now());
+      },
+      place: (p, x, z) => { const q = p as Player; q.x = x; q.z = z; q.t = Date.now(); q.tp = Date.now() + 600; },
+    };
+  }
   private all(r: Room, m: ServerMsg) { for (const p of r.players) p.conn?.send(m); }
 
   // ---------- l'indic ----------
@@ -322,17 +347,19 @@ export class Core {
     if (!me.bot) me.money -= it.price;
     me.traps++; me.busy = now + 2000;
     if (id === 'tuyau') r.heat = Math.min(100, r.heat + 15);
+    r.sec?.trap(id, now);
     this.sendMe(me);
     this.all(r, { t: 'fx', k: 'env', id: me.id, c: 'red' });
     // témoins : dans la galerie, à moins de 15 m, en train de regarder par là, sans obstacle
     const at = clockText(this.elapsed(r, now), REPERAGE_MS[r.settings.duree]);
+    const smoke = (r.sec?.activeSmokes() ?? []).map(s => [s.x - s.r * .8, s.z - s.r * .8, s.x + s.r * .8, s.z + s.r * .8]);
     for (const p of r.players) {
       if (p === me || p.bot || p.out || !p.conn) continue;
       if (!inRect(p.x, p.z, HALL_RECT) || !inRect(me.x, me.z, HALL_RECT)) continue;
       const dx = me.x - p.x, dz = me.z - p.z, d = Math.hypot(dx, dz);
       if (d > 15) continue;
       const facing = d < 1.5 ? 1 : (dx * -Math.sin(p.cy) + dz * -Math.cos(p.cy)) / d;
-      if (facing < .57 || !losClear(p.x, p.z, me.x, me.z)) continue;
+      if (facing < .57 || !losClear(p.x, p.z, me.x, me.z, smoke)) continue;
       p.conn.send({ t: 'proof', text: `Tu as vu ${me.name} recevoir une enveloppe rouge à la caisse (${at}).` });
     }
     for (const p of r.players) this.sendState(r, p);
@@ -393,7 +420,7 @@ export class Core {
   private meetOut(r: Room) { this.all(r, { t: 'meeting', m: this.meetState(r) }); }
   private sendState(r: Room, p: Player) {
     p.conn?.send({ t: 'state', heat: Math.round(r.heat), paused: r.paused + (r.pauseAt ? Date.now() - r.pauseAt : 0), meetLeft: r.meetLeft,
-      out: r.players.filter(q => q.out).map(q => q.id), myMeet: p.usedMeet, traps: p.traps });
+      out: r.players.filter(q => q.out).map(q => q.id), myMeet: p.usedMeet, traps: p.traps, lock: r.sec?.lock ?? 0 });
   }
   private checkEnd(r: Room, now: number) {
     if (r.phase !== 'night' || r.meeting) return;
@@ -407,14 +434,14 @@ export class Core {
   }
   private endNight(r: Room, winner: 'team' | 'indic', reason: string) {
     this.all(r, { t: 'end', winner, reason, roles: r.players.map(p => [p.id, p.role]) });
-    r.phase = 'lobby'; r.meeting = null; r.pauseAt = 0;
+    r.phase = 'lobby'; r.meeting = null; r.pauseAt = 0; r.sec = null;
     for (const p of r.players) { this.standUp(p); this.leaveTable(p); p.avatar = ''; p.out = false; }
     for (const tb of r.tables) { tb.ph = 'idle'; tb.bets = []; tb.players.clear(); }
     this.broadcastLobby(r);
   }
 
   private newPlayer(name: string): Player {
-    const p: Player = { id: rid(8), token: rid(24), name: clean(name), avatar: '', conn: null, room: null, lastSeen: Date.now(), x: 0, z: 0, yaw: 0, mv: 0, t: 0, money: 0, inv: {}, seat: -1, table: -1, busy: 0, role: 'team', out: false, usedMeet: false, cy: 0, traps: 0, nextTrap: 0, wait: 0 };
+    const p: Player = { id: rid(8), token: rid(24), name: clean(name), avatar: '', conn: null, room: null, lastSeen: Date.now(), x: 0, z: 0, yaw: 0, mv: 0, t: 0, money: 0, inv: {}, seat: -1, table: -1, busy: 0, role: 'team', out: false, usedMeet: false, cy: 0, traps: 0, nextTrap: 0, wait: 0, tp: 0 };
     this.byToken.set(p.token, p);
     return p;
   }
@@ -456,10 +483,11 @@ export class Core {
       else {
         for (const p of r.players) if (p.bot && !p.out) this.moveBot(r, p, TICK_MS / 1000, now);
         for (const tb of r.tables) this.stepTable(r, tb, now);
+        r.sec?.tick(r.players, now, TICK_MS / 1000);
         this.checkEnd(r, now);
       }
       if (r.phase !== 'night') continue;
-      const snap: ServerMsg = { t: 'snap', p: r.players.map(p => [p.id, round(p.x), round(p.z), round(p.yaw), p.seat >= 0 ? 0 : p.mv, p.seat]) };
+      const snap: ServerMsg = { t: 'snap', p: r.players.map(p => [p.id, round(p.x), round(p.z), round(p.yaw), p.seat >= 0 ? 0 : p.mv, p.seat]), w: r.sec?.snap(now) };
       for (const p of r.players) p.conn?.send(snap);
     }
   }
@@ -468,7 +496,7 @@ export class Core {
     // bot indic : quand il passe devant la caisse, il lui arrive d'acheter un coup piégé
     if (p.role === 'indic' && p.traps < 3 && now > p.nextTrap && dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.6 ** 2) {
       p.wait = now + 2600; p.yaw = Math.PI; p.nextTrap = now + 70000 + Math.random() * 50000;
-      this.trap(r, p, Math.random() < .7 ? 'tuyau' : 'fauxcode', now);
+      this.trap(r, p, ['tuyau', 'tuyau', 'vigile', 'serrure', 'fauxcode'][Math.floor(Math.random() * 5)], now);
       return;
     }
     const b = p.bot!, q = b.path[(b.i + 1) % b.path.length];

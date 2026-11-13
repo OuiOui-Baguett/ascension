@@ -3,7 +3,17 @@
 Jeu de braquage coopératif pour 3 à 8 joueurs sur mobile, avec un ou plusieurs indics cachés dans l'équipe.
 Navigateur (lien / PWA), Three.js + Vite + TypeScript, serveur Node (WebSocket).
 
-**État actuel : étape 3 — l'indic.** Tirage secret des rôles (nombre annoncé ou secret), menu piégé de la caisse
+**État actuel : étape 4 — les zones privées.** Derrière la porte « Personnel » et la porte de service du bar :
+couloirs, salle de surveillance, salle de comptage, bureau du directeur. Portes verrouillées (faux badge, crochetage
+en petit jeu d'adresse, ouverture libre de l'intérieur), vigiles qui font leur ronde avec un cône de vue découpé par
+les murs, caméras qui balaient, jauge « on te voit », chaleur qui monte (repéré par un vigile +10 %, filmé +5 %,
+course entendue, serrure qui claque, alarme de piratage ; gants = moitié). Objets utiles : fumigène (coupe toutes les
+vues 15 s), somnifère (par derrière), tenue de serveur (90 s), brouilleur (caméras à 12 m, 60 s), clé USB (piratage
+court). Les 3 morceaux du code de la chambre forte se trouvent dans le coffre du directeur, l'ordinateur de la
+sécurité et le tiroir du chef comptable. Nouveaux coups de l'indic : vigile prévenu, caméras rallumées, serrure
+renforcée, et le faux code falsifie vraiment un morceau. La chambre forte elle-même s'ouvrira à l'étape 5.
+
+**Étape 3 — l'indic.** Tirage secret des rôles (nombre annoncé ou secret), menu piégé de la caisse
 (tuyau aux flics, faux code, balise), enveloppe rouge visible, témoins calculés par le serveur (distance, regard,
 obstacles), carnet de preuves, jauge de chaleur, réunion de crise (toilettes ou radio près de l'entrée) avec vote,
 camp révélé, fins de partie (descente de police, indics démasqués, fermeture à 3 h). En solo, un bot peut être l'indic.
@@ -16,7 +26,7 @@ Pas encore d'indic, de vigiles ni de casse : les objets achetés ne font encore 
 
 **Voix (ElevenLabs)** : maître de jeu (explication des règles en 8 chapitres, lancée à la première visite et
 via « Le maître de jeu t'explique tout »), narration de la cinématique, croupier (annonces et les 37 numéros),
-caissière, annonce du jackpot. Fichiers dans `public/res/voix/`.
+caissière, annonce du jackpot, vigile. Fichiers dans `public/res/voix/`.
 
 ## Jouer en ligne avec des amis (hébergement gratuit sur Render)
 
@@ -58,6 +68,8 @@ Sur téléphone : pouce gauche = joystick (poussé à fond = course), glisser à
 - `src/net.ts` — connexion, jeton de reconnexion, mode local
 - `shared/items.ts`, `shared/games.ts`, `shared/layout.ts` — objets, règles et cotes des jeux, plan du casino
 - `src/play.ts` — interface de la nuit : argent, horloge, caisse, sac, roulette, machines
+- `shared/secu.ts`, `shared/watch.ts` — plan des zones privées et surveillance côté serveur (vigiles, caméras, portes)
+- `src/secu.ts` — zones privées à l'écran : portes, vigiles, cônes de vue, fumée, crochetage et piratage
 - `src/player.ts` — corps des joueurs (Rocketbox), animations marche/course, interpolation des autres joueurs
 - `src/cam.ts` — plans de cinéma et vue à l'épaule
 - `src/gfx/` — moteur de rendu (post-process, reflets planaires, pluie, textures peintes)

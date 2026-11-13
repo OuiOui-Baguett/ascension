@@ -24,6 +24,7 @@ import { Tuto } from './tuto';
 import { Net, LOCAL } from './net';
 import { Body, Remotes, CHARACTER } from './player';
 import { Play } from './play';
+import { Secu } from './secu';
 import type { ServerMsg } from '../shared/protocol';
 
 type Lobby = Extract<ServerMsg, { t: 'lobby' }>;
@@ -210,11 +211,13 @@ async function backToStreet() {
 const net = new Net();
 let lobby: Lobby | null = null, night: Night | null = null, pendingNight: Night | null = null;
 let remotes: Remotes | null = null, myBody: Body | null = null, nightSeed = -1, nightAt = 0;
+let secu: Secu | null = null;
 const play = new Play({
   net, walker, cam: () => world.camera, scene: () => hall?.scene ?? null, body: () => myBody, remotes: () => remotes,
   names: () => new Map((lobby?.players ?? []).map(p => [p.id, p.name])),
   toast: (a, b) => toast(a, b), error: m => showError(m),
   avatars: () => new Map((night?.players ?? []).map(p => [p.id, p.avatar])),
+  sec: () => secu,
 });
 
 net.onStatus = s => {
@@ -223,6 +226,7 @@ net.onStatus = s => {
   el.classList.toggle('hidden', s === 'online' || state === 'loading');
 };
 net.onMsg = m => {
+  if (secu?.onMsg(m)) return;
   if (play.onMsg(m)) return;
   switch (m.t) {
     case 'lobby':
@@ -232,7 +236,14 @@ net.onMsg = m => {
       renderMenu(); updateBadge();
       break;
     case 'started': onStarted(m); break;
-    case 'snap': remotes?.snap(m.p, net.id); break;
+    case 'snap': remotes?.snap(m.p, net.id); secu?.snap(m.w); break;
+    case 'tp':
+      // un vigile nous raccompagne hors des zones privées
+      if (play.mode !== 'walk') play.close();
+      walker.place(m.x, m.z, m.yaw);
+      if (myBody) { myBody.holder.position.set(m.x, 0, m.z); myBody.holder.rotation.y = m.yaw; }
+      fade(1, .12).then(() => fade(0, .5));
+      break;
     case 'gone': remotes?.remove(m.id); break;
     case 'left': lobby = null; night = null; if (state === 'explore' || state === 'cine') backToStreet(); else renderMenu(); break;
     case 'error': showError(m.msg); break;
@@ -266,6 +277,10 @@ function setupNight() {
   remotes = new Remotes(hall.scene);
   remotes.sync(night.players, net.id);
   for (const [id, x, z, yaw] of night.pos) remotes.place(id, x, z, yaw);
+  if (!secu) secu = new Secu(hall.scene, hall.solids as number[][], {
+    send: m => net.send(m), pos: () => walker.pos, inv: () => play.inv, lock: () => play.lock, out: () => play.out.has(net.id),
+    openMini: () => play.openMini(), closeMini: () => play.close(), toast: (a, b) => toast(a, b), error: m => showError(m),
+  });
   const me = night.players.find(p => p.id === net.id);
   if (me?.avatar) {
     myBody = new Body(me.avatar, null, hall.scene);
@@ -276,7 +291,7 @@ function setupNight() {
   updateBadge();
 }
 function teardownNight() {
-  play.stop();
+  play.stop(); secu?.reset();
   remotes?.clear(); remotes = null;
   myBody?.dispose(); myBody = null; walker.body = null;
 }
@@ -443,7 +458,7 @@ function frame(now: number) {
     director.update(stillN ? 1 / 30 : dt, time);
     rail.update(dt);
     walker.update(dt, world);
-    if (world === hall) { remotes?.update(dt); if (!walker.active && myBody) myBody.animate(0, dt); play.update(dt); }
+    if (world === hall) { remotes?.update(dt); if (!walker.active && myBody) myBody.animate(0, dt); play.update(dt); secu?.update(dt); }
     sendInput(dt, now);
     if (state === 'title') focusDof(director.focus, 14);
     else if (state === 'cine' || state === 'tuto') focusDof(director.focus, Math.max(3, director.focus * .7));
@@ -457,6 +472,7 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 (window as any).__gfx = () => ({ q: getQuality(), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, state });
+(window as any).__secu = () => secu;
 (window as any).__walk = (x: number, z: number, yaw: number, pitch = .2) => { walker.pos.set(x, 0, z); walker.yaw = yaw; walker.pitch = pitch; walker.bodyYaw = yaw + Math.PI; };
 (window as any).__net = () => ({ id: net.id, status: net.status, lobby, night: !!night, remotes: remotes?.map.size ?? 0, me: [walker.pos.x, walker.pos.z], state });
 (window as any).__keys = walker.keys;

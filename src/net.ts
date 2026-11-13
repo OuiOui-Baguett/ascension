@@ -31,6 +31,7 @@ export class Net {
   connect() {
     if (LOCAL) {
       const core = new Core();
+      (window as any).__core = core;   // pour les tests automatiques
       this.local = core.open({ send: m => queueMicrotask(() => this.receive(m)) });
       this.setStatus('online');
       this.local.message({ t: 'hello', token: this.token, name: this.name || 'Toi' });

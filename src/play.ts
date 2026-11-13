@@ -16,6 +16,8 @@ import { voice, preloadVoices } from './audio';
 import type { Walker } from './cam';
 import type { Net } from './net';
 import type { Body, Remotes } from './player';
+import type { Secu, Action } from './secu';
+import { INTEL, ORD } from '../shared/secu';
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
 /** La caissière, derrière le guichet central */
@@ -23,11 +25,12 @@ const CASHIER = { x: 0, z: -13.2 };
 const eur = (n: number) => n.toLocaleString('fr-FR') + ' €';
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
-type Mode = 'walk' | 'shop' | 'bag' | 'give' | 'roul' | 'slot' | 'notes';
+type Mode = 'walk' | 'shop' | 'bag' | 'give' | 'roul' | 'slot' | 'notes' | 'mini';
 interface Ctx {
   net: Net; walker: Walker; cam: () => THREE.PerspectiveCamera; scene: () => THREE.Scene | null;
   body: () => Body | null; remotes: () => Remotes | null; names: () => Map<string, string>;
   toast: (line: string, big: string) => void; error: (msg: string) => void; avatars: () => Map<string, string>;
+  sec: () => Secu | null;
 }
 
 export class Play {
@@ -35,7 +38,9 @@ export class Play {
   prices: Record<string, number> = {}; stock: Record<string, number> = {};
   jackpot = 0; mode: Mode = 'walk'; on = false;
   private clock0 = 0; private dur = 1; private clockTxt = '';
-  private near: { kind: 'caisse' | 'roul' | 'slot' | 'meet'; i: number } | null = null;
+  private near: { kind: 'caisse' | 'roul' | 'slot' | 'meet' | 'sec'; i: number } | null = null;
+  private secNear: { a: Action; b?: Action } | null = null;
+  lock = 0; clues = new Map<number, { code: string; text: string }>();
   role: 'team' | 'indic' = 'team'; nIndics: number | undefined; heat = 0; paused = 0; meetLeft = 2; myMeet = false; traps = 0;
   out = new Set<string>(); proofs: { text: string }[] = []; meet: MeetState | null = null; private meetAt = 0; private frozen = 0; private shopTab: 'normal' | 'trap' = 'normal';
   private giveTo: string | null = null;
@@ -58,7 +63,7 @@ export class Play {
   }
   stop() {
     this.hideMeet(); $('#role').classList.add('hidden');
-    this.proofs = []; this.out.clear(); this.meet = null; this.renderNotes();
+    this.proofs = []; this.clues.clear(); this.out.clear(); this.meet = null; this.renderNotes();
     this.close(false);
     this.on = false; $('#play').classList.add('hidden');
     this.reel?.dispose(); this.reel = null;
@@ -88,7 +93,7 @@ export class Play {
       case 'rtab': if (m.s.id === this.table) this.onTable(m.s); break;
       case 'role': this.role = m.role; this.nIndics = m.n; this.shopTab = 'normal'; if (this.on) this.showRole(); break;
       case 'state':
-        this.heat = m.heat; this.paused = m.paused; this.meetLeft = m.meetLeft; this.myMeet = m.myMeet; this.traps = m.traps;
+        this.heat = m.heat; this.paused = m.paused; this.meetLeft = m.meetLeft; this.myMeet = m.myMeet; this.traps = m.traps; this.lock = m.lock ?? 0;
         this.out = new Set(m.out); this.c.remotes()?.setHidden(this.out); this.renderHeat();
         if (this.out.has(this.c.net.id)) { $('#p-out').classList.remove('hidden'); if (this.mode !== 'walk' && this.mode !== 'notes') this.close(); }
         if (this.mode === 'shop') this.renderShop();
@@ -98,6 +103,12 @@ export class Play {
         this.c.toast('Preuve notée dans ton carnet', '🔍 Enveloppe rouge');
         break;
       case 'meeting': this.onMeeting(m.m); break;
+      case 'clue': {
+        const had = this.clues.get(m.i);
+        this.clues.set(m.i, { code: m.code, text: m.text }); this.renderNotes();
+        this.c.toast(had ? `Déjà noté : ${INTEL[m.i].where}` : `${ORD[m.i]} morceau du code · noté dans ton carnet`, `${m.code[0]} ${m.code[1]}`);
+        break;
+      }
       case 'error':
         if (this.mode === 'shop') this.say(/stock/.test(m.msg) ? 'caisse_epuise' : /argent/.test(m.msg) ? 'caisse_argent' : '', CASHIER);
         return false;
@@ -131,6 +142,20 @@ export class Play {
     const p = this.c.walker.pos;
     let near: Play['near'] = null;
     if (this.out.has(this.c.net.id)) { $('#p-act').classList.add('hidden'); $('#p-give').classList.add('hidden'); return; }
+    // zones privées d'abord : portes, coffres, vigiles
+    const sn = this.c.sec()?.near(p.x, p.z) ?? null;
+    this.secNear = sn;
+    if (sn) {
+      this.near = { kind: 'sec', i: 0 };
+      if (this.attract) { this.attract.dispose(); this.attract = null; this.attractSlot = -1; }
+      const act = $('#p-act'), gv = $('#p-give');
+      act.classList.remove('hidden'); act.classList.toggle('alarm', !!sn.a.warn);
+      act.innerHTML = `${esc(sn.a.label)}<small>${esc(sn.a.sub)}</small>`;
+      gv.classList.toggle('hidden', !sn.b);
+      if (sn.b) gv.innerHTML = `${esc(sn.b.label)}<small>${esc(sn.b.sub)}</small>`;
+      this.giveTo = null;
+      return;
+    }
     MEET_SPOTS.forEach((m, i) => { if (!near && !this.myMeet && this.meetLeft > 0 && dist2(p.x, p.z, m.x, m.z) < 2.4 ** 2) near = { kind: 'meet', i }; });
     if (!near && dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.4 ** 2) near = { kind: 'caisse', i: 0 };
     ROULETTES.forEach((t, i) => { if (!near && Math.abs(p.x - t.x) < 3.7 && Math.abs(p.z - t.z) < 2.7) near = { kind: 'roul', i }; });
@@ -178,6 +203,7 @@ export class Play {
   private act() {
     const n = this.near; if (!n) return;
     if (n.kind === 'meet') { this.c.net.send({ t: 'meet' }); return; }
+    if (n.kind === 'sec') { this.secNear?.a.fn(); return; }
     if (n.kind === 'caisse') { this.open('shop'); this.say('caisse_bonsoir', CASHIER); }
     else if (n.kind === 'roul') {
       this.table = n.i; this.ts = null; this.open('roul');
@@ -199,13 +225,14 @@ export class Play {
     }
   }
 
+  openMini() { this.open('mini'); }
   private open(mode: Mode) {
     this.close(false);
     this.attract?.dispose(); this.attract = null; this.attractSlot = -1;
     this.mode = mode;
     this.c.walker.active = false;
     $('#p-act').classList.add('hidden'); $('#p-give').classList.add('hidden');
-    const id = { shop: '#shop', bag: '#bag', give: '#give', roul: '#roul', slot: '#slot', notes: '#notes' }[mode as Exclude<Mode, 'walk'>];
+    const id = { shop: '#shop', bag: '#bag', give: '#give', roul: '#roul', slot: '#slot', notes: '#notes', mini: '#mini' }[mode as Exclude<Mode, 'walk'>];
     $(id).classList.remove('hidden');
     if (mode === 'shop') this.renderShop();
     if (mode === 'bag') this.renderBag();
@@ -217,6 +244,7 @@ export class Play {
   /** Ferme le panneau ouvert ; reactivate = on rend la main au joystick. */
   close(reactivate = true) {
     if (this.mode === 'roul') { this.c.net.send({ t: 'rleave' }); this.table = -1; }
+    if (this.mode === 'mini') this.c.sec()?.cancelMini();
     if (this.mode === 'slot') {
       this.c.net.send({ t: 'stand' }); this.c.body()?.stand();
       const s = SLOT_LIST[this.slot];
@@ -240,7 +268,7 @@ export class Play {
     $('#role h2').textContent = indic ? 'Tu es l\'indic' : 'Tu es de l\'équipe';
     $('#role p').innerHTML = indic
       ? 'Tu renseignes la police. Joue comme les autres, mais à la caisse tu as un <b>menu piégé</b> : chaque coup part tout de suite et la caissière te tend une <b>enveloppe rouge</b>. Si quelqu\'un te voit, il a une preuve. Ne te fais pas griller.'
-      : 'Préparez le casse ensemble : jouez, achetez, repérez. Ouvrez l\'œil à la caisse : celui qui reçoit une <b>enveloppe rouge</b> est un indic. Une réunion de crise se lance depuis les toilettes ou la radio de la camionnette (entrée).';
+      : 'Préparez le casse ensemble : jouez, achetez, repérez. Les <b>3 morceaux du code</b> de la chambre forte sont cachés dans les zones privées (porte « Personnel » au fond de la galerie, porte de service du bar). Ouvrez l\'œil à la caisse : celui qui reçoit une <b>enveloppe rouge</b> est un indic. Réunion de crise : toilettes ou radio de la camionnette (entrée).';
     $('#role small').textContent = n === undefined ? 'Nombre d\'indics : secret' : n === 0 ? 'Cette nuit : aucun indic, 100 % coopératif' : `Cette nuit : ${n} indic${n > 1 ? 's' : ''} parmi vous${indic && n > 1 ? ' (vous ne vous connaissez pas)' : ''}`;
     el.classList.remove('hidden');
   }
@@ -250,9 +278,13 @@ export class Play {
     $('#p-heat').classList.toggle('hot', this.heat >= 60);
   }
   private renderNotes() {
-    $('#p-notes small').textContent = this.proofs.length ? String(this.proofs.length) : '';
-    const html = this.proofs.length ? this.proofs.map(p => `<li><div>🔍 ${esc(p.text)}</div></li>`).join('')
-      : '<li class="empty">Aucune preuve pour l\'instant. Garde un œil sur la caisse : un indic qui achète un coup piégé reçoit une enveloppe rouge.</li>';
+    const n = this.proofs.length + this.clues.size;
+    $('#p-notes small').textContent = n ? String(n) : '';
+    const code = [0, 1, 2].map(i => this.clues.get(i)?.code ?? '··').join(' · ');
+    const head = this.clues.size ? `<li class="vcode"><div><b>Code de la chambre forte</b><span>${code}</span><p>Ce que tu as lu toi-même. Les autres peuvent mentir… ou avoir lu un document falsifié.</p></div></li>`
+      + [...this.clues.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => `<li><div>🗝️ ${esc(c.text)}</div></li>`).join('') : '';
+    const html = head + (this.proofs.length ? this.proofs.map(p => `<li><div>🔍 ${esc(p.text)}</div></li>`).join('')
+      : `<li class="empty">Aucune preuve pour l'instant. Garde un œil sur la caisse : un indic qui achète un coup piégé reçoit une enveloppe rouge.${this.clues.size ? '' : ' Les 3 morceaux du code de la chambre forte sont cachés dans les zones privées.'}</li>`);
     $('#notes-list').innerHTML = html; $('#m-proofs').innerHTML = html;
   }
   private onMeeting(m: MeetState | null) {
@@ -315,13 +347,14 @@ export class Play {
   private renderBag() {
     const own = ITEMS.filter(it => this.inv[it.id]);
     $('#bag-list').innerHTML = own.length
-      ? own.map(it => `<li><div><b>${it.name}</b> <i>×${this.inv[it.id]}</i><p>${it.desc}</p></div></li>`).join('')
+      ? own.map(it => `<li><div><b>${it.name}</b> <i>${it.id === 'badge' ? `${this.inv[it.id]} passage${this.inv[it.id] > 1 ? 's' : ''}` : '×' + this.inv[it.id]}</i><p>${it.desc}</p></div>${USABLE[it.id] ? `<button data-use="${it.id}"><span>Utiliser</span><small>${USABLE[it.id]}</small></button>` : ''}</li>`).join('')
       : '<li class="empty">Ton sac est vide. Tout s\'achète à la caisse, au fond de la galerie.</li>';
   }
   private renderMoney() {
     const v = this.holdMoney ?? this.money;
     $('#p-money').textContent = eur(v);
-    const n = Object.values(this.inv).reduce((a, b) => a + b, 0);
+    // le badge compte pour un objet (ses passages s'affichent dans le sac)
+    const n = Object.entries(this.inv).reduce((a, [k, v]) => a + (k === 'badge' ? 1 : v), 0);
     $('#p-bag small').textContent = n ? String(n) : '';
     if (this.mode === 'slot') $('#s-money').textContent = eur(v);
     if (this.mode === 'roul') $('#r-money').textContent = eur(v);
@@ -426,7 +459,14 @@ export class Play {
   // ---------- interface ----------
   private bindUi() {
     $('#p-act').onclick = () => this.act();
-    $('#p-give').onclick = () => { if (this.giveTo) { $('#give-who').textContent = this.c.names().get(this.giveTo) ?? ''; this.open('give'); } };
+    $('#p-give').onclick = () => {
+      if (this.near?.kind === 'sec') { this.secNear?.b?.fn(); return; }
+      if (this.giveTo) { $('#give-who').textContent = this.c.names().get(this.giveTo) ?? ''; this.open('give'); }
+    };
+    $('#bag-list').onclick = e => {
+      const b = (e.target as HTMLElement).closest('[data-use]') as HTMLElement | null;
+      if (b) { this.c.net.send({ t: 'use', item: b.dataset.use! }); this.close(); }
+    };
     $('#p-bag').onclick = () => this.open('bag');
     $('#p-notes').onclick = () => this.open('notes');
     document.querySelectorAll<HTMLElement>('#shop-tabs button').forEach(b => b.onclick = () => { this.shopTab = b.dataset.tab as any; this.renderShop(); });
@@ -482,6 +522,8 @@ function numLabel(n: number) {
 
 // ---------- rouleaux affichés sur l'écran de la machine ----------
 const SYM_N = 8;
+/** Objets qu'on déclenche depuis son sac */
+const USABLE: Record<string, string> = { fumi: '15 s de fumée', brouilleur: 'caméras à 12 m', tenue: '90 s' };
 class Reels {
   busy = false;
   private cv = document.createElement('canvas');

@@ -73,6 +73,8 @@
     <div id="play" class="hidden">
       <div id="p-top"><span id="p-clock">23 h 47</span><b id="p-money">500 €</b><button id="p-bag">Sac <small></small></button><button id="p-notes">Carnet <small></small></button></div>
       <div id="p-heat"><i></i><span>Chaleur 0 %</span></div>
+      <div id="p-zone" class="hidden">Zone privée</div>
+      <div id="p-sus" class="hidden"><i></i><span></span></div>
       <div id="p-out" class="hidden">Tu as été écarté : tu observes la fin de la nuit.</div>
       <button id="p-act" class="act hidden">Caisse<small>acheter</small></button>
       <button id="p-give" class="act sub hidden">Donner<small>à …</small></button>
@@ -83,7 +85,7 @@
     <header><h2>La caisse</h2><span class="pm">Ton argent : <b id="shop-money"></b></span><button class="x">Fermer</button></header>
     <div id="shop-tabs" class="hidden"><button data-tab="normal">Le menu</button><button data-tab="trap">Menu de l'inspecteur</button></div>
     <ul id="shop-list" class="items"></ul>
-    <p class="foot">Tout s'achète ici, à la vue de tous. Les objets serviront pendant le casse : ils ne font encore rien dans cette version.</p>
+    <p class="foot">Tout s'achète ici, à la vue de tous. Badge, crochetage, fumigène, somnifère, tenue, brouilleur, clé USB et gants servent dans les zones privées. Le sac, le talkie et la perceuse serviront au casse.</p>
   </section>
   <section id="bag" class="panel hidden">
     <header><h2>Ton sac</h2><button class="x">Fermer</button></header>
@@ -112,6 +114,12 @@
     <button id="s-spin">Lancer</button>
     <div id="s-msg"></div>
     <details><summary>Table des gains</summary><div id="s-pays"></div></details>
+  </section>
+
+  <section id="mini" class="panel small hidden">
+    <header><h2 id="mi-title"></h2><button class="x">Abandonner</button></header>
+    <p id="mi-help"></p>
+    <div id="mi-body"></div>
   </section>
 
   <div id="role" class="hidden"><div class="rcard"><span class="kick">Rôle secret · ne montre pas ton écran</span><h2></h2><p></p><small></small><button class="go">Compris ▸</button></div></div>

@@ -121,8 +121,7 @@ export function populateHall(c: Crowd, low: boolean) {
     if (inR(s, [-18, -15, -6.2, 15])) pct = 52;               // salle des jeux de table
     else if (inR(s, [6.2, -15, 18.2, 15])) pct = 22;          // tabourets des machines
     else if (inR(s, [18.4, -7, 30, 7])) pct = 70;             // salon privé
-    else if (inR(s, [12.4, -26, 20, -17])) pct = i % 2 ? 0 : 100;  // salle de surveillance : un vigile
-    else if (inR(s, [-14, -27, -5.2, -15.3])) pct = 40;       // salle de comptage
+    // zones privées : vides, ce sont les vrais vigiles (serveur) qui y patrouillent
     if (!pct || !keep(i, pct)) return;
     s.taken = true;
     const staff = inR(s, [-14, -27, 20, -15.3]);
@@ -145,15 +144,11 @@ export function populateHall(c: Crowd, low: boolean) {
   // salon des machines : on discute
   c.spawn('Business_Male_02', 'm_gestic_talk_neutral_01', 11.6, 0, 11, Math.PI / 2 + .3);
   c.spawn('Business_Female_02', 'f_idle_neutral_01', 12.8, 0, 10.7, -Math.PI / 2 - .2);
-  // bureau du directeur
-  c.spawn('Business_Male_05', 'm_sit_chair_idle_neutral_01', -17.6, 0, -25.35, 0, { seat: .46 });
   // passants dans la galerie, autour de la Grande Roue
   const loop: V3[] = [[-.9, 0, 13], [-.9, 0, 3.2], [-3.2, 0, 0], [-.9, 0, -3.2], [-.9, 0, -10.5], [.9, 0, -10.5], [.9, 0, -3.2], [3.2, 0, 0], [.9, 0, 3.2], [.9, 0, 13]];
   c.spawn('Business_Male_03', 'm_walk_stroll_01', 0, 0, 0, 0, { path: loop, speed: .95, phase: 0 });
   c.spawn('Business_Female_02', 'f_walk_neutral_01', 0, 0, 0, 0, { path: loop, speed: 1.15, phase: .35 });
   if (!low) c.spawn('Business_Male_01', 'm_walk_neutral_01', 0, 0, 0, 0, { path: loop, speed: 1.2, phase: .7 });
-  // couloir de service : un employé fait sa ronde
-  c.spawn('Business_Male_06', 'm_walk_neutral_01', 0, 0, 0, 0, { path: [[11, 0, -16], [11, 0, -28.2], [-22.5, 0, -28.2], [-22.5, 0, -9], [-22.5, 0, -28.2], [11, 0, -28.2], [11, 0, -16.2]], speed: 1.1, phase: .2 });
 }
 
 /** La rue : le portier sous la marquise, des passants pressés sous la pluie. */

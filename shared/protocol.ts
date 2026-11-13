@@ -31,7 +31,17 @@ export type ClientMsg =
   | { t: 'bet'; kind: BetKind; value: number; amount: number }
   | { t: 'bclear' }
   | { t: 'meet' }
-  | { t: 'vote'; target: string };
+  | { t: 'vote'; target: string }
+  // zones privées
+  | { t: 'door'; d: number; how: 'badge' | 'pick' | 'push' }
+  | { t: 'use'; item: string }
+  | { t: 'sleep'; g: number }
+  | { t: 'intel'; i: number }
+  | { t: 'noise'; kind: 'pick' | 'hack' };
+
+/** Zones privées dans chaque image du serveur : vigiles [x, z, yaw, état 0 ronde / 1 tourné / 2 alerte / 3 endormi],
+ *  caméras [yaw, état 0 allumée / 1 brouillée / 2 alarme], portes ouvertes (masque de bits). */
+export interface SecSnap { g: number[][]; c: number[][]; d: number }
 
 export interface MeetState { ph: 'talk' | 'vote' | 'reveal'; by: string; left: number; voted: string[]; alive: string[]; out?: string; outRole?: 'team' | 'indic'; counts?: [string, number][] }
 
@@ -43,7 +53,7 @@ export type ServerMsg =
   | { t: 'lobby'; code: string; host: string; phase: 'lobby' | 'night'; players: PlayerInfo[]; settings: Settings; maxIndics: number }
   | { t: 'started'; seed: number; rejoin: boolean; elapsed: number; dur: number; players: PlayerInfo[]; pos: [string, number, number, number][] }
   /** positions : id, x, z, orientation, allure (0 immobile, 1 marche, 2 course), machine occupée (-1 si debout) */
-  | { t: 'snap'; p: [string, number, number, number, number, number][] }
+  | { t: 'snap'; p: [string, number, number, number, number, number][]; w?: SecSnap }
   | { t: 'me'; money: number; inv: Record<string, number> }
   | { t: 'shop'; prices: Record<string, number>; stock: Record<string, number> }
   | { t: 'fx'; k: 'env'; id: string; c: 'white' | 'red' }
@@ -53,7 +63,14 @@ export type ServerMsg =
   | { t: 'rtab'; s: TableState }
   /** rôle secret, envoyé à chacun séparément ; n = nombre d'indics (absent si secret) */
   | { t: 'role'; role: 'team' | 'indic'; n?: number }
-  | { t: 'state'; heat: number; paused: number; meetLeft: number; out: string[]; myMeet: boolean; traps: number }
+  | { t: 'state'; heat: number; paused: number; meetLeft: number; out: string[]; myMeet: boolean; traps: number; lock: number }
+  | { t: 'smoke'; x: number; z: number; ms: number }
+  | { t: 'buff'; k: 'tenue'; ms: number }
+  | { t: 'alarm'; big: string; msg: string; voice?: string }
+  | { t: 'tp'; x: number; z: number; yaw: number }
+  /** soupçon : v = vigile g, c = caméra (0 → 1 = repéré) */
+  | { t: 'sus'; v: number; c: number; g: number }
+  | { t: 'clue'; i: number; code: string; text: string }
   | { t: 'proof'; text: string }
   | { t: 'meeting'; m: MeetState | null }
   | { t: 'end'; winner: 'team' | 'indic'; reason: string; roles: [string, 'team' | 'indic'][] }

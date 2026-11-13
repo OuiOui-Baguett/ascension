@@ -85,6 +85,7 @@ export class Body {
     this.holder.add(this.tag);
   }
 
+  tagVisible(v: boolean) { if (this.tag) this.tag.visible = v; }
   /** S'asseoir sur un tabouret : le bassin est calé au-dessus de l'assise. */
   sit(x: number, z: number, yaw: number, seatY = .73) {
     const [a0, a1, a2, a3] = this.acts;
