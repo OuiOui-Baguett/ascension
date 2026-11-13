@@ -156,7 +156,7 @@ export class Play {
       this.giveTo = null;
       return;
     }
-    MEET_SPOTS.forEach((m, i) => { if (!near && !this.myMeet && this.meetLeft > 0 && dist2(p.x, p.z, m.x, m.z) < 2.4 ** 2) near = { kind: 'meet', i }; });
+    MEET_SPOTS.forEach((m, i) => { if (!near && !this.myMeet && this.meetLeft > 0 && this.frozen > 90000 && dist2(p.x, p.z, m.x, m.z) < 2.4 ** 2) near = { kind: 'meet', i }; });
     if (!near && dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.4 ** 2) near = { kind: 'caisse', i: 0 };
     ROULETTES.forEach((t, i) => { if (!near && Math.abs(p.x - t.x) < 3.7 && Math.abs(p.z - t.z) < 2.7) near = { kind: 'roul', i }; });
     if (!near) {
@@ -267,8 +267,8 @@ export class Play {
     const n = this.nIndics;
     $('#role h2').textContent = indic ? 'Tu es l\'indic' : 'Tu es de l\'équipe';
     $('#role p').innerHTML = indic
-      ? 'Tu renseignes la police. Joue comme les autres, mais à la caisse tu as un <b>menu piégé</b> : chaque coup part tout de suite et la caissière te tend une <b>enveloppe rouge</b>. Si quelqu\'un te voit, il a une preuve. Ne te fais pas griller.'
-      : 'Préparez le casse ensemble : jouez, achetez, repérez. Les <b>3 morceaux du code</b> de la chambre forte sont cachés dans les zones privées (porte « Personnel » au fond de la galerie, porte de service du bar). Ouvrez l\'œil à la caisse : celui qui reçoit une <b>enveloppe rouge</b> est un indic. Réunion de crise : toilettes ou radio de la camionnette (entrée).';
+      ? 'Fais <b>échouer le casse</b> sans te faire griller : fais monter la chaleur à 100 %, ou fais traîner jusqu\'à 3 h. Tes armes : mentir sur le code, et le <b>menu piégé</b> de la caisse (mais la caissière te tend alors une <b>enveloppe rouge</b> que les autres peuvent voir).'
+      : '<b>1.</b> Trouvez les 3 morceaux du code. <b>2.</b> Ouvrez la chambre forte. <b>3.</b> Sortez les sacs jusqu\'à la camionnette avant 3 h. Évitez vigiles et caméras : à 100 % de chaleur, c\'est perdu. Suis la flèche en haut à gauche.';
     $('#role small').textContent = n === undefined ? 'Nombre d\'indics : secret' : n === 0 ? 'Cette nuit : aucun indic, 100 % coopératif' : `Cette nuit : ${n} indic${n > 1 ? 's' : ''} parmi vous${indic && n > 1 ? ' (vous ne vous connaissez pas)' : ''}`;
     el.classList.remove('hidden');
   }

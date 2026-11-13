@@ -70,7 +70,8 @@ async function start() {
   // première visite : le maître de jeu se présente tout seul (on peut passer)
   let seen = false; try { seen = !!localStorage.getItem('casse.tuto'); } catch { /* stockage indisponible */ }
   $('#tuto-btn').classList.toggle('new', !seen);
-  if (!seen && state === 'title' && !params.has('clean') && !params.has('notuto')) setTimeout(() => { if (state === 'title' && !lobby) startTuto(); }, 2500);
+  if (!seen && !params.has('clean') && !params.has('notuto')) $('#how').classList.remove('hidden');
+
 }
 
 async function ensureHall() {
@@ -280,6 +281,8 @@ function setupNight() {
   if (!secu) secu = new Secu(hall.scene, hall.solids as number[][], {
     send: m => net.send(m), pos: () => walker.pos, inv: () => play.inv, lock: () => play.lock, out: () => play.out.has(net.id),
     openMini: () => play.openMini(), closeMini: () => play.close(), toast: (a, b) => toast(a, b), error: m => showError(m),
+    yaw: () => walker.yaw, clues: () => play.clues, bodyOf: id => id === net.id ? myBody : remotes?.map.get(id)?.body ?? null,
+    noRun: v => { walker.noRun = v; }, me: () => net.id, indic: () => play.role === 'indic',
   });
   const me = night.players.find(p => p.id === net.id);
   if (me?.avatar) {
@@ -302,7 +305,7 @@ function showEnd(m: Extract<ServerMsg, { t: 'end' }>) {
   const av = new Map((night?.players ?? []).map(p => [p.id, p.avatar]));
   const mine = m.roles.find(r => r[0] === net.id)?.[1];
   const won = mine === m.winner;
-  $('#end h2').textContent = m.winner === 'team' ? 'L\'équipe gagne' : (m.roles.filter(r => r[1] === 'indic').length > 1 ? 'Les indics gagnent' : 'L\'indic gagne');
+  $('#end h2').textContent = m.winner === 'team' ? 'Casse réussi !' : !m.roles.some(r => r[1] === 'indic') ? 'Casse raté' : (m.roles.filter(r => r[1] === 'indic').length > 1 ? 'Les indics gagnent' : 'L\'indic gagne');
   $('#end').classList.toggle('indic', m.winner === 'indic');
   $('#end .why').textContent = m.reason;
   $('#end .you').textContent = mine ? (won ? 'Bien joué : ton camp l\'emporte.' : 'Perdu pour cette fois.') : '';
@@ -394,9 +397,10 @@ document.querySelectorAll<HTMLButtonElement>('[data-ind]').forEach(b => b.onclic
 });
 document.querySelectorAll<HTMLButtonElement>('#l-dur button').forEach(b => b.onclick = () => net.send({ t: 'settings', duree: b.dataset.d as any }));
 $('#addbot').onclick = () => net.send({ t: 'bot' });
-$('#tuto-btn').onclick = () => startTuto();
+$('#tuto-btn').onclick = () => $('#how').classList.remove('hidden');
+$('#how button').onclick = () => { $('#how').classList.add('hidden'); try { localStorage.setItem('casse.tuto', '1'); } catch { /* */ } };
 $('#l-secret').onclick = () => { if (lobby) net.send({ t: 'settings', secret: !lobby.settings.secret }); };
-$('#tuto-btn2').onclick = () => startTuto();
+$('#tuto-btn2').onclick = () => $('#how').classList.remove('hidden');
 $('#start').onclick = () => { startAudio(); net.send({ t: 'start' }); };
 $('#leave').onclick = () => net.send({ t: 'leave' });
 let quitArmed = 0;

@@ -4,7 +4,7 @@
 // piratage). Tout ce qui compte est décidé par le serveur.
 // ============================================================
 import * as THREE from 'three';
-import { DOORS, doorRect, outside, GUARD, CAMS, CAM, INTEL, isPrivate, blocked, closedRects, SMOKE_R, type Smoke } from '../shared/secu';
+import { DOORS, doorRect, outside, GUARD, CAMS, CAM, INTEL, VAULT_RECT, VAN, GATES, isPrivate, blocked, closedRects, SMOKE_R, type Smoke } from '../shared/secu';
 import type { SecSnap, ServerMsg, ClientMsg } from '../shared/protocol';
 import { Body } from './player';
 import { model } from './gfx/assets';
@@ -17,6 +17,7 @@ export interface Action { label: string; sub: string; fn: () => void; warn?: boo
 interface Ctx {
   send(m: ClientMsg): void; pos(): THREE.Vector3; inv(): Record<string, number>; lock(): number; out(): boolean;
   openMini(): void; closeMini(): void; toast(a: string, b: string): void; error(m: string): void;
+  yaw(): number; clues(): Map<number, { code: string }>; bodyOf(id: string): Body | null; noRun(v: boolean): void; me(): string; indic(): boolean;
 }
 interface GView { body: Body; cone: Cone; icon: THREE.Sprite; buf: { t: number; x: number; z: number; yaw: number }[]; st: number; last: THREE.Vector3 }
 const DELAY = 120;
@@ -66,9 +67,11 @@ export class Secu {
   private guards: GView[] = [];
   private smokes: (Smoke & { until: number; g: THREE.Group; t0: number; ms: number })[] = [];
   private mask = 0;
+  heist = { v: 0, n: 0, l: 0, t: 3, b: [] as [string, number][] };
+  private packs = new Map<string, THREE.Mesh>(); private goalKey = '';
   private icons = { q: iconTex('?', '#ffd84a'), x: iconTex('!', '#ff3b2a'), z: iconTex('Zz', '#9ad0ff') };
   sus = { v: 0, c: 0, g: -1 }; tenue = 0;
-  private mini: { kind: 'pick' | 'hack'; done: (ok: boolean) => void; [k: string]: any } | null = null;
+  private mini: { kind: 'pick' | 'hack' | 'code'; done: (ok: boolean) => void; [k: string]: any } | null = null;
 
   constructor(private scene: THREE.Scene, solids: number[][], private c: Ctx) {
     preloadVoices(['vigile_hey', 'vigile_bruit']);
@@ -118,7 +121,7 @@ export class Secu {
   snap(w: SecSnap | undefined) {
     if (!w) return;
     const t = performance.now();
-    this.mask = w.d;
+    this.mask = w.d; this.heist = { v: w.v, n: w.n, l: w.l, t: w.t, b: w.b };
     w.g.forEach(([x, z, yaw, st], i) => {
       let g = this.guards[i];
       if (!g) {
@@ -150,6 +153,8 @@ export class Secu {
     for (const g of this.guards) { g.body.dispose(); g.cone.dispose(); }
     this.guards = [];
     for (const s of this.smokes) this.scene.remove(s.g);
+    for (const m of this.packs.values()) m.parent?.remove(m);
+    this.packs.clear(); this.heist = { v: 0, n: 0, l: 0, t: 3, b: [] }; this.c.noRun(false); $('#p-goal').classList.add('hidden');
     this.smokes = []; this.mask = 0; this.sus = { v: 0, c: 0, g: -1 }; this.tenue = 0;
     if (this.mini) this.endMini(false, true);
     this.renderSus(); $('#p-zone').classList.add('hidden');
@@ -218,6 +223,50 @@ export class Secu {
     z.classList.toggle('hidden', !priv);
     if (priv) { const tl = Math.ceil((this.tenue - now) / 1000); const t = tl > 0 ? `Zone privée · tenue de serveur ${tl} s` : 'Zone privée'; if (z.textContent !== t) z.textContent = t; }
     if (this.mini) this.stepMini(dt);
+    // sacs de butin sur le dos de ceux qui en portent
+    const carrying = new Map(this.heist.b);
+    for (const [id, n] of carrying) {
+      let m = this.packs.get(id); const body = this.c.bodyOf(id);
+      if (!body) continue;
+      if (!m) { m = new THREE.Mesh(new THREE.BoxGeometry(.42, .34, .24), new THREE.MeshStandardMaterial({ color: '#2c3a2a', roughness: .9 })); m.layers.set(1); this.packs.set(id, m); }
+      if (m.parent !== body.holder) body.holder.add(m);
+      m.position.set(0, 1.18, -.24); m.scale.set(1, n > 1 ? 1.7 : 1, 1);
+    }
+    for (const [id, m] of this.packs) if (!carrying.has(id)) { m.parent?.remove(m); this.packs.delete(id); }
+    const mine = carrying.get(this.c.me()) ?? 0;
+    this.c.noRun(mine > 0);
+    this.renderGoal(me, mine);
+  }
+
+  /** L'objectif du moment, toujours à l'écran, avec une flèche vers l'endroit où aller. */
+  private renderGoal(me: THREE.Vector3, mine: number) {
+    const el = $('#p-goal'), H = this.heist, clues = this.c.clues(), inv = this.c.inv();
+    el.classList.toggle('hidden', this.c.out());
+    let step = 0, to = { x: 0, z: 0 }, hint = '';
+    if (!H.v) {
+      const miss = INTEL.map((I, i) => ({ I, i })).filter(q => !clues.has(q.i));
+      if (miss.length) {
+        const q = miss.sort((a, b) => (a.I.x - me.x) ** 2 + (a.I.z - me.z) ** 2 - (b.I.x - me.x) ** 2 - (b.I.z - me.z) ** 2)[0];
+        to = q.I; hint = `${q.I.name}${q.I.game === 'pick' && !inv.crochet ? ' · achète un kit de crochetage' : ''}`;
+        if (!isPrivate(me.x, me.z) && !inv.crochet && !inv.badge) hint = 'D\'abord la caisse : kit de crochetage ou faux badge', to = { x: 0, z: -11.45 };
+      } else { step = 1; to = DOORS[GATES[0]]; hint = 'Tape le code à la grille'; }
+    } else if (mine) { step = 2; to = VAN; hint = 'Porte le sac à la camionnette (entrée)'; }
+    else { step = 2; to = { x: 3, z: -21 }; hint = H.n ? 'Prends un sac dans la chambre forte' : 'Plus de sacs : aidez les porteurs'; }
+    const code = [0, 1, 2].map(i => clues.get(i)?.code ?? '··').join(' ');
+    const key = `${step}|${code}|${H.l}|${H.t}|${hint}|${this.c.indic()}`;
+    if (key !== this.goalKey) {
+      this.goalKey = key;
+      const li = (i: number, t: string) => `<li class="${i < step ? 'done' : i === step ? 'now' : ''}"><i>${i < step ? '✓' : i + 1}</i>${t}</li>`;
+      el.innerHTML = `<ol>${li(0, `Trouver le code <b>${code}</b>`)}${li(1, 'Ouvrir la chambre forte')}${li(2, `Sortir les sacs <b>${Math.min(H.l, H.t)} / ${H.t}</b>`)}</ol>`
+        + (this.c.indic() ? '<p class="ind">Toi, l\'indic : fais échouer le casse sans te faire griller.</p>' : '')
+        + `<div class="way"><em>➤</em><span></span></div>`;
+    }
+    const dx = to.x - me.x, dz = to.z - me.z, d = Math.hypot(dx, dz), y = this.c.yaw();
+    const sx = dx * Math.cos(y) - dz * Math.sin(y), sy = -dx * Math.sin(y) - dz * Math.cos(y);
+    const arrow = el.querySelector('.way em') as HTMLElement, sp = el.querySelector('.way span') as HTMLElement;
+    arrow.style.transform = `rotate(${Math.atan2(sx, sy) - Math.PI / 2}rad)`;
+    const txt = `${hint} · ${Math.round(d)} m`;
+    if (sp.textContent !== txt) sp.textContent = txt;
   }
 
   private addSmoke(x: number, z: number, ms: number) {
@@ -249,10 +298,13 @@ export class Secu {
     const inv = this.c.inv();
     for (const [i, I] of INTEL.entries()) {
       if ((px - I.x) ** 2 + (pz - I.z) ** 2 > 1.5 ** 2) continue;
-      if (I.game === 'hack') return { a: { label: 'Pirater', sub: I.name, fn: () => this.startHack(inv.usb ? 2 : 4, ok => ok ? this.c.send({ t: 'intel', i }) : this.c.send({ t: 'noise', kind: 'hack' })) } };
+      if (I.game === 'hack') return { a: { label: 'Pirater', sub: I.name, fn: () => this.startHack(3, ok => ok ? this.c.send({ t: 'intel', i }) : this.c.send({ t: 'noise', kind: 'hack' })) } };
       if (!inv.crochet) return { a: { label: 'Fermé', sub: 'kit de crochetage', warn: true, fn: () => this.c.error(`${I.name} : il te faut un kit de crochetage.`) } };
       return { a: { label: 'Crocheter', sub: I.name, fn: () => this.startPick(3 + I.pins + this.c.lock(), ok => ok ? this.c.send({ t: 'intel', i }) : this.c.send({ t: 'noise', kind: 'pick' })) } };
     }
+    const R = VAULT_RECT, mine = new Map(this.heist.b).get(this.c.me()) ?? 0;
+    if (mine && (px - VAN.x) ** 2 + (pz - VAN.z) ** 2 < 3 ** 2) return { a: { label: 'Déposer', sub: 'dans la camionnette', fn: () => this.c.send({ t: 'drop' }) } };
+    if (this.heist.v && this.heist.n > 0 && mine < (inv.sac ? 2 : 1) && px > R[0] && px < R[2] && pz > R[1] && pz < R[3]) return { a: { label: 'Prendre', sub: `un sac · reste ${this.heist.n}`, fn: () => this.c.send({ t: 'grab' }) } };
     if (inv.somni) {
       for (const [gi, g] of this.guards.entries()) {
         const h = g.body.holder.position;
@@ -262,7 +314,7 @@ export class Secu {
     for (const [i, D] of this.doors.entries()) {
       const d = D.d;
       if (D.open || (px - d.x) ** 2 + (pz - d.z) ** 2 > 1.6 ** 2) continue;
-      if (d.kind === 'vault') return { a: { label: 'Grille', sub: 'fermée', warn: true, fn: () => this.c.error('La grille de la chambre forte ne s\'ouvre qu\'après la fermeture, avec le code.') } };
+      if (d.kind === 'vault') return { a: { label: 'Code', sub: 'chambre forte', fn: () => this.startCode() } };
       if (!outside(d, px, pz)) return { a: { label: 'Ouvrir', sub: d.name, fn: () => this.c.send({ t: 'door', d: i, how: 'push' }) } };
       const pick: Action = { label: 'Crocheter', sub: 'la serrure', fn: () => this.startPick(3 + this.c.lock(), ok => ok ? this.c.send({ t: 'door', d: i, how: 'pick' }) : this.c.send({ t: 'noise', kind: 'pick' })) };
       const badge: Action = { label: 'Badge', sub: `${inv.badge} passage${inv.badge > 1 ? 's' : ''}`, fn: () => this.c.send({ t: 'door', d: i, how: 'badge' }) };
@@ -278,6 +330,7 @@ export class Secu {
     $('#mi-body').addEventListener('pointerdown', e => {
       const m = this.mini; if (!m) return;
       if (m.kind === 'pick') { e.preventDefault(); if (performance.now() - m.t0 > 250) this.pickTap(); return; }
+      if (m.kind === 'code') { const d = (e.target as HTMLElement).closest('[data-d]') as HTMLElement | null; if (d) this.codeTap(d.dataset.d!); return; }
       const b = (e.target as HTMLElement).closest('[data-k]') as HTMLElement | null;
       if (b) this.hackTap(+b.dataset.k!);
     });
@@ -309,11 +362,29 @@ export class Secu {
       if (m.miss >= 2) { this.c.error('Clac ! La serrure a fait du bruit.'); this.endMini(false); }
     }
   }
+  /** Clavier de la grille : pré-rempli avec les morceaux qu'on a lus soi-même. */
+  private startCode() {
+    const cl = this.c.clues();
+    this.mini = { kind: 'code', done: () => {}, v: [0, 1, 2].map(i => cl.get(i)?.code ?? '').join('').length === 6 ? [0, 1, 2].map(i => cl.get(i)!.code).join('') : '' };
+    $('#mi-title').textContent = 'Code de la chambre forte';
+    $('#mi-help').innerHTML = '6 chiffres : les 3 morceaux dans l\'ordre (bureau du directeur, sécurité, comptage). Demande aux autres ceux qui te manquent. <b>Un mauvais code = +10 % de chaleur.</b>';
+    $('#mi-body').innerHTML = `<div class="kp"><div class="kp-v"></div><div class="kp-g">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 'x', 0, 'ok'].map(k => `<button data-d="${k}">${k === 'x' ? '⌫' : k === 'ok' ? 'Valider' : k}</button>`).join('')}</div></div>`;
+    this.codeTap('');
+    this.c.openMini();
+  }
+  private codeTap(k: string) {
+    const m = this.mini!;
+    if (k === 'x') m.v = m.v.slice(0, -1);
+    else if (k === 'ok') { if (m.v.length === 6) { this.c.send({ t: 'code', code: m.v }); this.endMini(true, true); } return; }
+    else if (k && m.v.length < 6) m.v += k;
+    const cl = this.c.clues();
+    $('#mi-body .kp-v').innerHTML = [0, 1, 2].map(i => `<span class="${cl.has(i) ? 'k' : ''}">${(m.v.slice(i * 2, i * 2 + 2) + '··').slice(0, 2)}</span>`).join('');
+  }
   private startHack(rounds: number, done: (ok: boolean) => void) {
     const glyph = ['A3', '7F', 'C0', '19', 'E4', '5B', 'D2', '8E', '06'];
     this.mini = { kind: 'hack', done, rounds, round: 0, seq: [] as number[], input: 0, show: 0, t: 0 };
     $('#mi-title').textContent = 'Piratage';
-    $('#mi-help').innerHTML = `Retiens les blocs qui s'allument, puis touche-les dans le même ordre. ${rounds} séquences${rounds < 4 ? ' (clé USB : version courte)' : ''}. Une erreur déclenche l'alarme.`;
+    $('#mi-help').innerHTML = `Retiens les blocs qui s'allument, puis touche-les dans le même ordre. ${rounds} séquences. Une erreur déclenche l'alarme.`;
     $('#mi-body').innerHTML = `<div class="hk"><span class="hk-st">Connexion…</span><div class="hk-grid">${glyph.map((g, k) => `<button data-k="${k}">${g}</button>`).join('')}</div></div>`;
     this.nextSeq();
     this.c.openMini();
@@ -340,6 +411,7 @@ export class Secu {
   }
   private stepMini(dt: number) {
     const m = this.mini!;
+    if (m.kind === 'code') return;
     if (m.kind === 'pick') {
       m.x += m.dir * m.speed * dt;
       if (m.x > 1) { m.x = 1; m.dir = -1; } else if (m.x < 0) { m.x = 0; m.dir = 1; }

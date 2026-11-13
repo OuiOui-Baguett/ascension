@@ -4,13 +4,13 @@
 // décide qui est repéré : la page ne fait que montrer.
 // ============================================================
 import type { ServerMsg } from './protocol';
-import { isPrivate, DOORS, DOOR_OPEN_MS, ROUTES, GUARD, CAMS, CAM, camYaw, INTEL, ORD, SMOKE_R, SMOKE_MS, clearLine, closedRects, outside, type Smoke } from './secu';
+import { VAULT_RECT, VAN, BAGS, GATES, isPrivate, DOORS, DOOR_OPEN_MS, ROUTES, GUARD, CAMS, CAM, camYaw, INTEL, ORD, SMOKE_R, SMOKE_MS, clearLine, closedRects, outside, type Smoke } from './secu';
 
 /** Ce que la surveillance a besoin de savoir d'un joueur. */
 export interface WPlayer { id: string; name: string; x: number; z: number; mv: number; out: boolean; bot?: unknown; inv: Record<string, number> }
 export interface WIO {
   send(p: WPlayer, m: ServerMsg): void; all(m: ServerMsg): void; others(p: WPlayer, m: ServerMsg): void; err(p: WPlayer, msg: string): void;
-  me(p: WPlayer): void; heat(p: WPlayer | null, base: number): void; place(p: WPlayer, x: number, z: number): void;
+  me(p: WPlayer): void; end(winner: 'team' | 'indic', reason: string): void; heat(p: WPlayer | null, base: number): void; place(p: WPlayer, x: number, z: number): void;
 }
 interface Guard { route: number; i: number; x: number; z: number; yaw: number; wait: number; look: number; sleep: number; turn: number; turnYaw: number; alert: number }
 interface PS { sus: number; csus: number; src: number; grace: number; cgrace: number; noise: number; tenue: number; found: Set<number>; sent: string }
@@ -27,8 +27,9 @@ export class Watch {
   code = Array.from({ length: 6 }, () => Math.floor(Math.random() * 10)).join('');
   fakes = new Map<number, string>();
   private ps = new Map<string, PS>();
+  open = false; bags = BAGS; loot = 0; carry = new Map<string, number>();
 
-  constructor(private io: WIO) { this.addGuard(0, 0); this.addGuard(1, 0); }
+  constructor(private io: WIO, public target = 3) { this.addGuard(0, 0); this.addGuard(1, 0); }
 
   addGuard(route: number, i: number) {
     const R = ROUTES[route], q = R[i % R.length];
@@ -49,7 +50,7 @@ export class Watch {
     const D = DOORS[d];
     if (!D || (p.x - D.x) ** 2 + (p.z - D.z) ** 2 > 2 ** 2) return;
     if (this.doors[d] > now) return;
-    if (D.kind === 'vault') return this.io.err(p, 'La grille de la chambre forte ne s\'ouvre qu\'après la fermeture, avec le code.');
+    if (D.kind === 'vault') return;
     if (how === 'push') { if (outside(D, p.x, p.z)) return this.io.err(p, 'C\'est fermé à clé de ce côté.'); }
     else if (how === 'badge') {
       if (D.kind !== 'staff') return this.io.err(p, 'Le badge n\'ouvre pas cette serrure : il faut la crocheter.');
@@ -58,6 +59,31 @@ export class Watch {
     } else if (how === 'pick') { if (!p.inv.crochet) return this.io.err(p, 'Il te faut un kit de crochetage.'); }
     else return;
     this.doors[d] = now + DOOR_OPEN_MS;
+  }
+  /** Le code à 6 chiffres, tapé à l'une des deux grilles. Un mauvais code alerte la sécurité. */
+  tryCode(p: WPlayer, code: string) {
+    if (this.open || !GATES.some(i => (p.x - DOORS[i].x) ** 2 + (p.z - DOORS[i].z) ** 2 < 2.4 ** 2)) return;
+    if (code !== this.code) {
+      this.io.send(p, { t: 'alarm', big: 'Code refusé', msg: 'La sécurité est alertée. Un des morceaux est faux… ou quelqu\'un ment.' });
+      this.io.others(p, { t: 'alarm', big: '', msg: `${p.name} a tapé un mauvais code à la chambre forte.` });
+      return this.io.heat(null, 10);
+    }
+    this.open = true; for (const i of GATES) this.doors[i] = Infinity;
+    this.io.all({ t: 'alarm', big: 'Chambre forte ouverte !', msg: `${p.name} a tapé le bon code. Sortez les sacs jusqu'à la camionnette.` });
+  }
+  grab(p: WPlayer) {
+    const R = VAULT_RECT, n = this.carry.get(p.id) ?? 0;
+    if (!this.open || p.x < R[0] || p.x > R[2] || p.z < R[1] || p.z > R[3]) return;
+    if (this.bags <= 0) return this.io.err(p, 'La chambre forte est vide.');
+    if (n >= (p.inv.sac ? 2 : 1)) return this.io.err(p, p.inv.sac ? 'Tu portes déjà 2 sacs.' : 'Tu portes déjà un sac (le grand sac de sport permet d\'en porter 2).');
+    this.bags--; this.carry.set(p.id, n + 1);
+  }
+  drop(p: WPlayer) {
+    const n = this.carry.get(p.id) ?? 0;
+    if (!n || (p.x - VAN.x) ** 2 + (p.z - VAN.z) ** 2 > 3.2 ** 2) return;
+    this.carry.delete(p.id); this.loot += n;
+    this.io.all({ t: 'alarm', big: `Butin ${Math.min(this.loot, this.target)} / ${this.target}`, msg: `${p.name} a chargé ${n > 1 ? n + ' sacs' : 'un sac'} dans la camionnette.` });
+    if (this.loot >= this.target) this.io.end('team', 'Le butin est dans la camionnette : le casse est réussi !');
   }
   use(p: WPlayer, item: string, now: number) {
     if (!(p.inv[item] > 0)) return;
@@ -108,8 +134,7 @@ export class Watch {
   /** Coups de l'indic liés aux zones privées. */
   trap(id: string, now: number) {
     if (id === 'vigile' && this.guards.length < 4) this.addGuard(this.guards.length === 2 ? 2 : 1, 9);
-    if (id === 'cameras') { for (const c of this.cams) c.jam = 0; this.noJam = now + 120000; }
-    if (id === 'serrure') this.lock = Math.min(2, this.lock + 1);
+    void now;
     if (id === 'fauxcode') {
       const free = [0, 1, 2].filter(i => !this.fakes.has(i));
       if (free.length) {
@@ -141,6 +166,8 @@ export class Watch {
     const to = west ? { x: -22.5, z: -6.4 } : { x: 11, z: -13.6 };
     this.io.place(p, to.x, to.z);
     this.io.send(p, { t: 'tp', x: to.x, z: to.z, yaw: 0 });
+    const c = this.carry.get(p.id);
+    if (c) { this.carry.delete(p.id); this.bags += c; why += ' Le sac est retourné à la chambre forte.'; }
     this.io.send(p, { t: 'alarm', big: 'Repéré !', msg: why, voice: 'vigile_hey' });
     this.io.others(p, { t: 'alarm', big: '', msg: `${p.name} s'est fait raccompagner par un vigile.` });
     this.io.heat(p, 10);
@@ -224,6 +251,7 @@ export class Watch {
       g: this.guards.map(g => [r2(g.x), r2(g.z), r2(g.yaw), g.sleep > now ? 3 : g.alert > now ? 2 : g.turn > now ? 1 : 0]),
       c: CAMS.map((c, i) => [r2(camYaw(c, tSec, i)), this.cams[i].jam > now ? 1 : this.cams[i].alarm > now ? 2 : 0]),
       d: this.doors.reduce((m, t, i) => t > now ? m | (1 << i) : m, 0),
+      v: this.open ? 1 : 0, n: this.bags, l: this.loot, t: this.target, b: [...this.carry] as [string, number][],
     };
   }
 }

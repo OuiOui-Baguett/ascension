@@ -89,6 +89,8 @@ export class Walker {
   pos = new THREE.Vector3(); yaw = 0; pitch = .2; bodyYaw = Math.PI;
   move = new THREE.Vector2(); keys = new Set<string>();
   active = false; speed = 0; dist = 2.6;
+  /** on ne court pas avec un sac de butin sur le dos */
+  noRun = false;
   body: { holder: THREE.Object3D; animate(v: number, dt: number): void } | null = null;
   private joyId: number | null = null; private lookId: number | null = null;
   private joyOrigin = new THREE.Vector2(); private last = new THREE.Vector2();
@@ -148,7 +150,7 @@ export class Walker {
     let mag = Math.min(1, mv.length());
     if (mag > 0) mv.normalize();
     // joystick : à moitié = marche, à fond = course · clavier : Maj = course
-    const running = kb ? k.has('shift') : mag > .9;
+    const running = !this.noRun && (kb ? k.has('shift') : mag > .9);
     if (kb) mag = running ? 1 : .8;
     const target = mag < .12 ? 0 : running ? 4.2 : 1.9 * Math.min(1, mag / .8);
     this.speed += (target - this.speed) * Math.min(1, dt * (target > this.speed ? 6 : 10));

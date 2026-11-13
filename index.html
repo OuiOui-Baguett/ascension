@@ -33,7 +33,7 @@
       <div id="v-home" class="view">
         <div class="dl"><span>Objectif</span><b>Grand Casino — la caisse</b></div>
         <div class="dl"><span>Équipe</span><b>3 à 8 · dont au moins un indic</b></div>
-        <button id="tuto-btn" class="tuto-btn">Le maître de jeu t'explique tout <s>▸</s></button>
+        <button id="tuto-btn" class="tuto-btn">Comment jouer (30 secondes) <s>▸</s></button>
         <label class="field"><span>Ton pseudo</span><input id="name" maxlength="16" placeholder="Ton prénom" autocomplete="off" spellcheck="false" enterkeyhint="done"></label>
         <nav>
           <button id="create" class="primary">Créer une partie <s>▸</s></button>
@@ -73,6 +73,7 @@
     <div id="play" class="hidden">
       <div id="p-top"><span id="p-clock">23 h 47</span><b id="p-money">500 €</b><button id="p-bag">Sac <small></small></button><button id="p-notes">Carnet <small></small></button></div>
       <div id="p-heat"><i></i><span>Chaleur 0 %</span></div>
+      <div id="p-goal" class="hidden"></div>
       <div id="p-zone" class="hidden">Zone privée</div>
       <div id="p-sus" class="hidden"><i></i><span></span></div>
       <div id="p-out" class="hidden">Tu as été écarté : tu observes la fin de la nuit.</div>
@@ -85,7 +86,7 @@
     <header><h2>La caisse</h2><span class="pm">Ton argent : <b id="shop-money"></b></span><button class="x">Fermer</button></header>
     <div id="shop-tabs" class="hidden"><button data-tab="normal">Le menu</button><button data-tab="trap">Menu de l'inspecteur</button></div>
     <ul id="shop-list" class="items"></ul>
-    <p class="foot">Tout s'achète ici, à la vue de tous. Badge, crochetage, fumigène, somnifère, tenue, brouilleur, clé USB et gants servent dans les zones privées. Le sac, le talkie et la perceuse serviront au casse.</p>
+    <p class="foot">Tout s'achète ici, à la vue de tous. Le kit de crochetage ou le faux badge suffisent pour commencer. Le reste aide à éviter les vigiles et les caméras.</p>
   </section>
   <section id="bag" class="panel hidden">
     <header><h2>Ton sac</h2><button class="x">Fermer</button></header>
@@ -121,6 +122,19 @@
     <p id="mi-help"></p>
     <div id="mi-body"></div>
   </section>
+
+  <div id="how" class="hidden"><div class="hbox">
+    <span class="kick">Comment jouer</span><h2>Le casse en 3 étapes</h2>
+    <ol>
+      <li><b>Trouvez le code.</b> 3 morceaux cachés dans les zones privées (derrière la porte « Personnel »). Il faut un <em>kit de crochetage</em> ou un <em>faux badge</em>, vendus à la caisse. Pas assez d'argent ? Jouez à la roulette ou aux machines.</li>
+      <li><b>Ouvrez la chambre forte.</b> Mettez vos morceaux en commun et tapez les 6 chiffres à la grille.</li>
+      <li><b>Sortez les sacs.</b> Un sac par personne, jusqu'à la camionnette devant l'entrée, avant 3 h.</li>
+    </ol>
+    <p><b class="w">Attention :</b> les vigiles et les caméras font monter la <b>chaleur</b>. À 100 %, la police débarque et c'est perdu.</p>
+    <p><b class="w">Et il y a un traître :</b> l'indic joue avec vous mais veut faire échouer le casse (mentir sur le code, alerter les flics à la caisse : il reçoit alors une enveloppe rouge). Un doute ? Réunion de crise aux toilettes, et on vote.</p>
+    <p class="s">Une flèche à l'écran t'indique toujours où aller.</p>
+    <button>Compris ▸</button>
+  </div></div>
 
   <div id="role" class="hidden"><div class="rcard"><span class="kick">Rôle secret · ne montre pas ton écran</span><h2></h2><p></p><small></small><button class="go">Compris ▸</button></div></div>
   <div id="meet" class="hidden"><div class="mbox">

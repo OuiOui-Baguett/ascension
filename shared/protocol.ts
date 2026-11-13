@@ -37,11 +37,14 @@ export type ClientMsg =
   | { t: 'use'; item: string }
   | { t: 'sleep'; g: number }
   | { t: 'intel'; i: number }
-  | { t: 'noise'; kind: 'pick' | 'hack' };
+  | { t: 'noise'; kind: 'pick' | 'hack' }
+  | { t: 'code'; code: string }
+  | { t: 'grab' }
+  | { t: 'drop' };
 
 /** Zones privées dans chaque image du serveur : vigiles [x, z, yaw, état 0 ronde / 1 tourné / 2 alerte / 3 endormi],
  *  caméras [yaw, état 0 allumée / 1 brouillée / 2 alarme], portes ouvertes (masque de bits). */
-export interface SecSnap { g: number[][]; c: number[][]; d: number }
+export interface SecSnap { g: number[][]; c: number[][]; d: number; v: number; n: number; l: number; t: number; b: [string, number][] }
 
 export interface MeetState { ph: 'talk' | 'vote' | 'reveal'; by: string; left: number; voted: string[]; alive: string[]; out?: string; outRole?: 'team' | 'indic'; counts?: [string, number][] }
 

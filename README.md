@@ -3,7 +3,14 @@
 Jeu de braquage coopératif pour 3 à 8 joueurs sur mobile, avec un ou plusieurs indics cachés dans l'équipe.
 Navigateur (lien / PWA), Three.js + Vite + TypeScript, serveur Node (WebSocket).
 
-**État actuel : étape 4 — les zones privées.** Derrière la porte « Personnel » et la porte de service du bar :
+**État actuel : version 2 — la boucle complète, resserrée.** Un seul but, affiché en permanence avec une flèche :
+1) trouver les 3 morceaux du code dans les zones privées, 2) taper les 6 chiffres à la grille de la chambre forte
+(mauvais code = +10 % de chaleur), 3) porter les sacs jusqu'à la camionnette devant l'entrée avant 3 h (un sac par
+personne, 2 avec le grand sac, pas de course en portant). L'équipe gagne quand le butin visé est chargé ; l'indic
+gagne si la chaleur atteint 100 % ou si 3 h sonnent. Caisse réduite à 7 objets, menu de l'indic à 3 coups,
+explication d'une page (« Comment jouer ») à la place du long tutoriel. Pas d'indic à moins de 3 joueurs.
+
+**Étape 4 — les zones privées.** Derrière la porte « Personnel » et la porte de service du bar :
 couloirs, salle de surveillance, salle de comptage, bureau du directeur. Portes verrouillées (faux badge, crochetage
 en petit jeu d'adresse, ouverture libre de l'intérieur), vigiles qui font leur ronde avec un cône de vue découpé par
 les murs, caméras qui balaient, jauge « on te voit », chaleur qui monte (repéré par un vigile +10 %, filmé +5 %,

@@ -150,7 +150,7 @@ export class Core {
           if (p.bot) { p.bot.path = BOT_PATHS[0]; p.bot.i = 0; const q = p.bot.path[0]; p.x = q[0]; p.z = q[1]; }
         }
         r.heat = 0; r.paused = 0; r.pauseAt = 0; r.meetLeft = 2; r.meeting = null;
-        r.sec = new Watch(this.io(r));
+        r.sec = new Watch(this.io(r), Math.min(8, 2 + r.players.filter(p => !p.bot).length));
         this.broadcastLobby(r);
         for (const p of r.players) {
           p.conn?.send(this.startedMsg(r, false)); this.sendEcon(r, p);
@@ -270,6 +270,9 @@ export class Core {
       case 'sleep': r.sec?.sleep(me, m.g, now); break;
       case 'intel': r.sec?.intel(me, m.i, now); break;
       case 'noise': r.sec?.noise(me, m.kind, now); break;
+      case 'code': r.sec?.tryCode(me, String(m.code)); break;
+      case 'grab': r.sec?.grab(me); break;
+      case 'drop': r.sec?.drop(me); break;
       case 'bclear': {
         const tb = r.tables[me.table];
         if (!tb || tb.ph !== 'bets') return;
@@ -323,10 +326,10 @@ export class Core {
     return {
       send: (p, m) => (p as Player).conn?.send(m), all: m => this.all(r, m), err: (p, msg) => this.err(p as Player, msg),
       others: (p, m) => { for (const q of r.players) if (q !== p) q.conn?.send(m); },
-      me: p => this.sendMe(p as Player),
+      me: p => this.sendMe(p as Player), end: (w, why) => this.endNight(r, w, why),
       heat: (p, base) => {
         if (r.phase !== 'night') return;
-        r.heat = Math.min(100, r.heat + (p?.inv.gants ? Math.ceil(base / 2) : base));
+        r.heat = Math.min(100, r.heat + base);
         for (const q of r.players) this.sendState(r, q);
         this.checkEnd(r, Date.now());
       },
@@ -426,11 +429,8 @@ export class Core {
     if (r.phase !== 'night' || r.meeting) return;
     const indics = r.players.filter(p => p.role === 'indic'), alive = indics.filter(p => !p.out);
     if (r.heat >= 100) return this.endNight(r, 'indic', 'Descente de police : la chaleur a atteint 100 %.');
-    if (indics.length && !alive.length) return this.endNight(r, 'team', indics.length > 1 ? 'Tous les indics ont été démasqués.' : 'L\'indic a été démasqué.');
-    if (this.elapsed(r, now) >= REPERAGE_MS[r.settings.duree]) {
-      if (alive.length) return this.endNight(r, 'indic', '3 h : le casino ferme et l\'indic court toujours.');
-      return this.endNight(r, 'team', '3 h : le casino ferme, l\'équipe est restée propre.');
-    }
+    void alive;
+    if (this.elapsed(r, now) >= REPERAGE_MS[r.settings.duree]) return this.endNight(r, 'indic', '3 h : le casino ferme. Le butin n\'est pas sorti à temps.');
   }
   private endNight(r: Room, winner: 'team' | 'indic', reason: string) {
     this.all(r, { t: 'end', winner, reason, roles: r.players.map(p => [p.id, p.role]) });
@@ -496,7 +496,7 @@ export class Core {
     // bot indic : quand il passe devant la caisse, il lui arrive d'acheter un coup piégé
     if (p.role === 'indic' && p.traps < 3 && now > p.nextTrap && dist2(p.x, p.z, CAISSE.x, CAISSE.z) < 2.6 ** 2) {
       p.wait = now + 2600; p.yaw = Math.PI; p.nextTrap = now + 70000 + Math.random() * 50000;
-      this.trap(r, p, ['tuyau', 'tuyau', 'vigile', 'serrure', 'fauxcode'][Math.floor(Math.random() * 5)], now);
+      this.trap(r, p, ['tuyau', 'tuyau', 'vigile', 'fauxcode', 'tuyau'][Math.floor(Math.random() * 5)], now);
       return;
     }
     const b = p.bot!, q = b.path[(b.i + 1) % b.path.length];
@@ -507,7 +507,7 @@ export class Core {
   }
 }
 
-export function maxIndics(n: number) { return n >= 8 ? 3 : n >= 6 ? 2 : 1; }
+export function maxIndics(n: number) { return n >= 8 ? 3 : n >= 6 ? 2 : n >= 3 ? 1 : 0; }
 const clean = (s: string) => (s || 'Anonyme').replace(/[<>]/g, '').trim().slice(0, 16) || 'Anonyme';
 const round = (v: number) => Math.round(v * 100) / 100;
 function shuffle<T>(a: T[]) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }

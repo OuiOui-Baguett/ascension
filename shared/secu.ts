@@ -68,6 +68,8 @@ export const INTEL = [
   { x: -6.1, z: -23.1, game: 'pick' as const, pins: 0, name: 'Tiroir du chef comptable', where: 'Salle de comptage' },
 ];
 export const ORD = ['1er', '2e', '3e'];
+/** Le casse : la chambre forte, ses sacs, et la camionnette où les déposer (devant l'entrée). */
+export const VAULT_RECT = [-5, -26, 5, -15.3], VAN = { x: 0, z: 13.4 }, BAGS = 10, GATES = [5, 6];
 
 export interface Smoke { x: number; z: number; r: number }
 export const SMOKE_R = 2.8, SMOKE_MS = 15000;
