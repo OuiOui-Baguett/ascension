@@ -1,83 +1,41 @@
-// Messages échangés entre les téléphones et le serveur de jeu.
-import type { BetKind } from './games';
+// Messages échangés entre la page et le serveur.
 export const MAX_PLAYERS = 8;
-export const TICK_MS = 66;   // ~15 positions par seconde
-/** Personnages tirés au sort pour les joueurs (Microsoft Rocketbox, MIT). */
-export const PLAYER_AVATARS = ['Business_Male_01', 'Business_Male_02', 'Business_Male_03', 'Business_Male_05',
-  'Business_Female_01', 'Business_Female_02', 'Female_Party_02'];
+export const TICK_MS = 33;
 
-export interface Settings { indics: number; duree: 'courte' | 'normale' | 'longue'; secret?: boolean }
-export interface PlayerInfo { id: string; name: string; avatar: string; online: boolean; bot: boolean }
+export interface Settings { lives: number }
+export interface PlayerInfo { id: string; name: string; color: number; bot: boolean; host: boolean }
 
 export type ClientMsg =
   | { t: 'hello'; token?: string; name: string }
+  | { t: 'name'; name: string }
   | { t: 'create' }
   | { t: 'join'; code: string }
-  | { t: 'name'; name: string }
-  | { t: 'settings'; indics?: number; duree?: Settings['duree']; secret?: boolean }
-  | { t: 'bot' }
-  | { t: 'start' }
-  | { t: 'input'; x: number; z: number; yaw: number; mv: number; cy?: number }
   | { t: 'leave' }
-  | { t: 'ping'; c: number }
-  // argent, caisse, jeux
-  | { t: 'buy'; item: string }
-  | { t: 'give'; to: string; amount: number }
-  | { t: 'sit'; slot: number }
-  | { t: 'stand' }
-  | { t: 'spin'; bet: number }
-  | { t: 'rjoin'; table: number }
-  | { t: 'rleave' }
-  | { t: 'bet'; kind: BetKind; value: number; amount: number }
-  | { t: 'bclear' }
-  | { t: 'meet' }
-  | { t: 'vote'; target: string }
-  // zones privées
-  | { t: 'door'; d: number; how: 'badge' | 'pick' | 'push' }
-  | { t: 'use'; item: string }
-  | { t: 'sleep'; g: number }
-  | { t: 'intel'; i: number }
-  | { t: 'noise'; kind: 'pick' | 'hack' }
-  | { t: 'code'; code: string }
-  | { t: 'grab' }
-  | { t: 'drop' };
+  | { t: 'bot'; add: boolean }
+  | { t: 'settings'; lives: number }
+  | { t: 'start' }
+  /** position de son propre corps (la page fait sa physique) */
+  | { t: 'in'; x: number; y: number; z: number; yaw: number; pitch: number; st: number }
+  /** un coup : origine, direction de visée, numéro (pour relier le projectile prévu dans la page) */
+  | { t: 'atk'; k: 'punch' | 'blast'; x: number; y: number; z: number; yaw: number; pitch: number; s: number }
+  | { t: 'fell' }
+  | { t: 'ping'; c: number };
 
-/** Zones privées dans chaque image du serveur : vigiles [x, z, yaw, état 0 ronde / 1 tourné / 2 alerte / 3 endormi],
- *  caméras [yaw, état 0 allumée / 1 brouillée / 2 alarme], portes ouvertes (masque de bits). */
-export interface SecSnap { g: number[][]; c: number[][]; d: number; v: number; n: number; l: number; t: number; b: [string, number][] }
-
-export interface MeetState { ph: 'talk' | 'vote' | 'reveal'; by: string; left: number; voted: string[]; alive: string[]; out?: string; outRole?: 'team' | 'indic'; counts?: [string, number][] }
-
-/** État d'une table de roulette tel que l'envoie le serveur */
-export interface TableState { id: number; ph: 'idle' | 'bets' | 'spin' | 'result'; left: number; bets: [string, BetKind, number, number][]; res: number; hist: number[]; wins: [string, number][] }
+/** [id, x, y, z, yaw, pitch, état (bits : 1 au sol, 2 ruée, 4 vol, 8 bouclier, 16 hors jeu)] */
+export type SnapRow = [string, number, number, number, number, number, number];
 
 export type ServerMsg =
   | { t: 'welcome'; id: string; token: string }
-  | { t: 'lobby'; code: string; host: string; phase: 'lobby' | 'night'; players: PlayerInfo[]; settings: Settings; maxIndics: number }
-  | { t: 'started'; seed: number; rejoin: boolean; elapsed: number; dur: number; players: PlayerInfo[]; pos: [string, number, number, number][] }
-  /** positions : id, x, z, orientation, allure (0 immobile, 1 marche, 2 course), machine occupée (-1 si debout) */
-  | { t: 'snap'; p: [string, number, number, number, number, number][]; w?: SecSnap }
-  | { t: 'me'; money: number; inv: Record<string, number> }
-  | { t: 'shop'; prices: Record<string, number>; stock: Record<string, number> }
-  | { t: 'fx'; k: 'env'; id: string; c: 'white' | 'red' }
-  | { t: 'note'; msg: string }
-  | { t: 'slot'; reels: number[]; win: number; jackpot: boolean; money: number }
-  | { t: 'jack'; v: number; who?: string; amount?: number }
-  | { t: 'rtab'; s: TableState }
-  /** rôle secret, envoyé à chacun séparément ; n = nombre d'indics (absent si secret) */
-  | { t: 'role'; role: 'team' | 'indic'; n?: number }
-  | { t: 'state'; heat: number; paused: number; meetLeft: number; out: string[]; myMeet: boolean; traps: number; lock: number }
-  | { t: 'smoke'; x: number; z: number; ms: number }
-  | { t: 'buff'; k: 'tenue'; ms: number }
-  | { t: 'alarm'; big: string; msg: string; voice?: string }
-  | { t: 'tp'; x: number; z: number; yaw: number }
-  /** soupçon : v = vigile g, c = caméra (0 → 1 = repéré) */
-  | { t: 'sus'; v: number; c: number; g: number }
-  | { t: 'clue'; i: number; code: string; text: string }
-  | { t: 'proof'; text: string }
-  | { t: 'meeting'; m: MeetState | null }
-  | { t: 'end'; winner: 'team' | 'indic'; reason: string; roles: [string, 'team' | 'indic'][] }
-  | { t: 'gone'; id: string }
-  | { t: 'left' }
+  | { t: 'lobby'; code: string; players: PlayerInfo[]; settings: Settings; phase: 'lobby' | 'play' }
+  | { t: 'start'; players: PlayerInfo[]; lives: number; spawn: { x: number; y: number; z: number; yaw: number }; /** ms avant le top départ */ at: number }
+  | { t: 'snap'; p: SnapRow[] }
+  | { t: 'stats'; s: [string, number, number][] }            // [id, jauge %, vies]
+  | { t: 'atk'; id: string; k: 'punch' | 'blast'; n: number } // pour animer les autres
+  | { t: 'proj'; pid: number; owner: string; s: number; x: number; y: number; z: number; dx: number; dy: number; dz: number }
+  | { t: 'boom'; pid: number; x: number; y: number; z: number }
+  | { t: 'hit'; id: string; by: string; k: 'punch' | 'blast'; pct: number; ix: number; iy: number; iz: number; stun: number; x: number; y: number; z: number; big: boolean }
+  | { t: 'ko'; id: string; by: string | null; lives: number; x: number; z: number }
+  | { t: 'spawn'; id: string; x: number; y: number; z: number; yaw: number }
+  | { t: 'end'; winner: string | null; ranking: string[] }
   | { t: 'error'; msg: string }
   | { t: 'pong'; c: number };

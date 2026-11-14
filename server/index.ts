@@ -1,5 +1,5 @@
 // ============================================================
-// Serveur de Le Casse : sert le site (dossier dist) et fait tourner les parties
+// Serveur de Naufragés : sert le site (dossier dist) et fait tourner les parties
 // en temps réel par WebSocket sur /ws. Un seul processus, rien d'autre à installer.
 // ============================================================
 import http from 'node:http';
@@ -40,7 +40,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4 * 1024 });
 const alive = new WeakMap<WebSocket, boolean>();
 wss.on('connection', ws => {
   alive.set(ws, true);
@@ -62,4 +62,4 @@ setInterval(() => {
   }
 }, 15000);
 
-server.listen(PORT, () => console.log(`Le Casse — serveur prêt sur le port ${PORT} (site : ${DIST})`));
+server.listen(PORT, () => console.log(`Naufragés — serveur prêt sur le port ${PORT} (site : ${DIST})`));

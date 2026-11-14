@@ -2,162 +2,75 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#050507" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b5fa5" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Le Casse</title>
+  <title>Naufragés</title>
 </head>
 <body>
   <canvas id="c"></canvas>
 
-  <div id="loader">
-    <div class="ld-logo"><span>LE</span> CASSE</div>
-    <div class="ld-bar"><i></i></div>
-    <div class="ld-txt">Ouverture du dossier… <b>0 %</b></div>
-  </div>
-
-  <div id="title" class="hidden">
-    <div class="kicker">Un jeu de braquage pour 3 à 8 complices</div>
-    <h1 class="logo" aria-label="Le Casse">
-      <span class="lg lg-top">LE CASSE</span>
-      <span class="lg lg-bot">LE CASSE</span>
-      <i class="cut"></i>
-    </h1>
-    <p class="tag">Un casse. Une nuit. <em>Un traître.</em></p>
-
-    <section class="dossier">
-      <div class="tab">DOSSIER Nº 23-47</div>
-      <div class="stamp">CONFIDENTIEL</div>
-
-      <div id="v-home" class="view">
-        <div class="dl"><span>Objectif</span><b>Grand Casino — la caisse</b></div>
-        <div class="dl"><span>Équipe</span><b>3 à 8 · dont au moins un indic</b></div>
-        <button id="tuto-btn" class="tuto-btn">Comment jouer (30 secondes) <s>▸</s></button>
-        <label class="field"><span>Ton pseudo</span><input id="name" maxlength="16" placeholder="Ton prénom" autocomplete="off" spellcheck="false" enterkeyhint="done"></label>
-        <nav>
-          <button id="create" class="primary">Créer une partie <s>▸</s></button>
-          <div class="join" id="join-row"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go"><button id="join">Rejoindre ▸</button></div>
-          <div class="row"><button id="q">Qualité : <b>Auto</b></button><button id="snd">Son : <b>Oui</b></button></div>
-        </nav>
-        <div class="note" id="home-note">Personnages : Microsoft Rocketbox (MIT)</div>
+  <div id="title" class="screen">
+    <div class="brand">
+      <h1 class="logo">NAUFRAGÉS</h1>
+      <p class="tag">La baston sur l'île déserte</p>
+    </div>
+    <div class="card menu">
+      <label class="field"><span>Ton pseudo</span><input id="name" maxlength="14" placeholder="Ton prénom" autocomplete="off" spellcheck="false" enterkeyhint="done"></label>
+      <button id="train" class="btn big yellow">S'entraîner contre des bots</button>
+      <button id="create" class="btn big">Créer une partie entre potes</button>
+      <div class="join"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="join" class="btn">Rejoindre</button></div>
+      <div class="rules">
+        <p><b>Le but :</b> éjecter les autres dans l'eau.</p>
+        <p>Chaque coup reçu fait monter ta jauge <em>%</em>. Plus elle est haute, plus tu voles loin.</p>
+        <p><b>3 vies</b> chacun, le dernier sur l'île gagne.</p>
       </div>
-
-      <div id="v-lobby" class="view hidden">
-        <div class="code"><span>Code de la partie</span><b id="l-code">····</b></div>
-        <ul id="l-players"></ul>
-        <div class="sets">
-          <div class="set"><span>Indics</span><div class="step"><button data-ind="-1">−</button><b id="l-ind">1</b><button data-ind="1">+</button></div></div>
-          <div class="set"><span>Nombre d'indics</span><button id="l-secret" class="tog">Annoncé</button></div>
-          <div class="set"><span>Durée</span><div class="seg" id="l-dur"><button data-d="courte">15 min</button><button data-d="normale">20 min</button><button data-d="longue">30 min</button></div></div>
-        </div>
-        <nav>
-          <button id="start" class="primary">Lancer la nuit <s>▸</s></button>
-          <div class="row"><button id="addbot">+ Ajouter un bot</button><button id="tuto-btn2">Règles</button><button id="leave">Quitter</button></div>
-        </nav>
-        <div class="note" id="l-note"></div>
-      </div>
-    </section>
-  </div>
-
-  <div id="bars"><i class="top"></i><i class="bot"></i></div>
-  <div id="sub"></div>
-  <div id="skip" class="hidden">Toucher pour passer ▸▸</div>
-
-  <div id="hud" class="hidden">
-    <button id="back">Quitter</button>
-    <div id="badge"></div>
-    <div id="help">Pouce gauche pour marcher (à fond pour courir) · glisse à droite pour tourner la caméra</div>
-    <div id="toast"></div>
-    <div id="joy"><i></i></div>
-    <div id="play" class="hidden">
-      <div id="p-top"><span id="p-clock">23 h 47</span><b id="p-money">500 €</b><button id="p-bag">Sac <small></small></button><button id="p-notes">Carnet <small></small></button></div>
-      <div id="p-heat"><i></i><span>Chaleur 0 %</span></div>
-      <div id="p-goal" class="hidden"></div>
-      <div id="p-zone" class="hidden">Zone privée</div>
-      <div id="p-sus" class="hidden"><i></i><span></span></div>
-      <div id="p-out" class="hidden">Tu as été écarté : tu observes la fin de la nuit.</div>
-      <button id="p-act" class="act hidden">Caisse<small>acheter</small></button>
-      <button id="p-give" class="act sub hidden">Donner<small>à …</small></button>
+      <button id="snd" class="link">Son : oui</button>
     </div>
   </div>
 
-  <section id="shop" class="panel hidden">
-    <header><h2>La caisse</h2><span class="pm">Ton argent : <b id="shop-money"></b></span><button class="x">Fermer</button></header>
-    <div id="shop-tabs" class="hidden"><button data-tab="normal">Le menu</button><button data-tab="trap">Menu de l'inspecteur</button></div>
-    <ul id="shop-list" class="items"></ul>
-    <p class="foot">Tout s'achète ici, à la vue de tous. Le kit de crochetage ou le faux badge suffisent pour commencer. Le reste aide à éviter les vigiles et les caméras.</p>
-  </section>
-  <section id="bag" class="panel hidden">
-    <header><h2>Ton sac</h2><button class="x">Fermer</button></header>
-    <ul id="bag-list" class="items"></ul>
-  </section>
-  <section id="notes" class="panel hidden">
-    <header><h2>Ton carnet</h2><button class="x">Fermer</button></header>
-    <ul id="notes-list" class="items"></ul>
-    <p class="foot">Les preuves ne s'inventent pas : seul le serveur sait qui a vu quoi. Lis-les aux autres pendant la réunion de crise.</p>
-  </section>
-  <section id="give" class="panel small hidden">
-    <header><h2>Donner à <span id="give-who"></span></h2><button class="x">Annuler</button></header>
-    <div class="gives"><button data-g="20">20 €</button><button data-g="50">50 €</button><button data-g="100">100 €</button><button data-g="250">250 €</button></div>
-  </section>
-  <section id="roul" class="panel game hidden">
-    <header><h2 id="r-phase"></h2><span id="r-time"></span><button class="x">Quitter</button></header>
-    <div id="r-msg"></div>
-    <div id="r-hist" class="hist"></div>
-    <div class="felt"><div id="r-grid"></div><div id="r-out"></div></div>
-    <div class="rbar"><div id="r-chips" class="chips"></div><button id="r-clear">Annuler mes mises</button></div>
-    <div class="rinfo"><span id="r-mine"></span><span id="r-others"></span><b id="r-money"></b></div>
-  </section>
-  <section id="slot" class="panel game small hidden">
-    <header><h2>Jackpot <b id="s-jack"></b></h2><button class="x">Se lever</button></header>
-    <div class="sline"><div id="s-bets" class="chips"></div><b id="s-money"></b></div>
-    <button id="s-spin">Lancer</button>
-    <div id="s-msg"></div>
-    <details><summary>Table des gains</summary><div id="s-pays"></div></details>
-  </section>
-
-  <section id="mini" class="panel small hidden">
-    <header><h2 id="mi-title"></h2><button class="x">Abandonner</button></header>
-    <p id="mi-help"></p>
-    <div id="mi-body"></div>
-  </section>
-
-  <div id="how" class="hidden"><div class="hbox">
-    <span class="kick">Comment jouer</span><h2>Le casse en 3 étapes</h2>
-    <ol>
-      <li><b>Trouvez le code.</b> 3 morceaux cachés dans les zones privées (derrière la porte « Personnel »). Il faut un <em>kit de crochetage</em> ou un <em>faux badge</em>, vendus à la caisse. Pas assez d'argent ? Jouez à la roulette ou aux machines.</li>
-      <li><b>Ouvrez la chambre forte.</b> Mettez vos morceaux en commun et tapez les 6 chiffres à la grille.</li>
-      <li><b>Sortez les sacs.</b> Un sac par personne, jusqu'à la camionnette devant l'entrée, avant 3 h.</li>
-    </ol>
-    <p><b class="w">Attention :</b> les vigiles et les caméras font monter la <b>chaleur</b>. À 100 %, la police débarque et c'est perdu.</p>
-    <p><b class="w">Et il y a un traître :</b> l'indic joue avec vous mais veut faire échouer le casse (mentir sur le code, alerter les flics à la caisse : il reçoit alors une enveloppe rouge). Un doute ? Réunion de crise aux toilettes, et on vote.</p>
-    <p class="s">Une flèche à l'écran t'indique toujours où aller.</p>
-    <button>Compris ▸</button>
-  </div></div>
-
-  <div id="role" class="hidden"><div class="rcard"><span class="kick">Rôle secret · ne montre pas ton écran</span><h2></h2><p></p><small></small><button class="go">Compris ▸</button></div></div>
-  <div id="meet" class="hidden"><div class="mbox">
-    <header><div><span class="kick">Réunion de crise</span><h2 id="m-by"></h2></div><b id="m-time"></b></header>
-    <p id="m-phase"></p>
-    <div id="m-grid"></div>
-    <details><summary>Mes preuves</summary><ul id="m-proofs" class="items"></ul></details>
-  </div></div>
-  <div id="end" class="hidden"><div class="ebox"><span class="kick">Fin de la nuit</span><h2></h2><p class="why"></p><p class="you"></p><ul></ul><button>Retour au salon ▸</button></div></div>
-
-  <div id="tuto" class="hidden">
-    <div class="t-top"><span class="t-kick">Le maître de jeu</span><h2 id="t-title"></h2><span id="t-num"></span></div>
-    <div id="t-dots"></div>
-    <div id="t-card" class="tcard"></div>
-    <div id="t-sub"></div>
-    <button id="t-sound" class="hidden">🔊 Toucher pour entendre le maître de jeu</button>
-    <div class="t-btns"><button id="t-skip">Passer ✕</button><button id="t-next">Suivant ▸</button></div>
+  <div id="lobby" class="screen hidden">
+    <div class="card menu wide">
+      <div class="codebox"><span>Code de la partie</span><b id="l-code">····</b><small>Envoie-le à tes potes</small></div>
+      <ul id="l-players"></ul>
+      <div class="row set"><span>Vies</span><div class="step"><button data-l="-1" class="btn sq">−</button><b id="l-lives">3</b><button data-l="1" class="btn sq">+</button></div></div>
+      <div class="row"><button id="addbot" class="btn">+ Bot</button><button id="rmbot" class="btn">− Bot</button><button id="leave" class="btn ghost">Quitter</button></div>
+      <button id="start" class="btn big yellow">Lancer la baston</button>
+      <p id="l-note" class="note"></p>
+    </div>
   </div>
 
-  <div id="fade"></div>
-  <div id="wait" class="hidden">…</div>
-  <div id="net" class="hidden">Connexion au serveur…</div>
-  <div id="err" class="hidden"></div>
+  <div id="hud" class="hidden">
+    <div id="cards"></div>
+    <div id="feed"></div>
+    <div id="cross"><i></i></div>
+    <div id="center"><b></b><span></span></div>
+    <div id="mypct"><b>0 %</b><span></span></div>
+    <div id="hurt"></div>
+    <div id="joy"><i></i></div>
+    <div id="btns">
+      <button id="b-blast" class="pad"><span>Pouvoir</span><i class="cd"></i></button>
+      <button id="b-jump" class="pad sm"><span>Saut</span></button>
+      <button id="b-dash" class="pad sm"><span>Esquive</span><i class="cd"></i></button>
+      <button id="b-punch" class="pad xl"><span>Frapper</span></button>
+    </div>
+    <button id="quit" class="btn ghost small">Quitter</button>
+    <div id="lockhint" class="hidden">Clique pour viser à la souris · ZQSD bouger · clic gauche frapper · clic droit pouvoir · Espace sauter · Maj esquive</div>
+  </div>
+
+  <div id="end" class="screen hidden">
+    <div class="card menu">
+      <h2 id="e-title">Victoire !</h2>
+      <ol id="e-rank"></ol>
+      <button id="again" class="btn big yellow">Revanche</button>
+      <button id="toLobby" class="btn">Retour au salon</button>
+    </div>
+  </div>
+
+  <div id="rotate">Tourne ton téléphone pour jouer ↻</div>
+  <div id="toast"></div>
+  <div id="loading">Chargement de l'île…</div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -17,8 +17,8 @@ function store(k: string, v?: string) {
 
 export class Net {
   id = '';
-  token = store('casse.token');
-  name = store('casse.name');
+  token = store('nfg.token');
+  name = store('nfg.name');
   status: Status = 'connecting';
   onMsg: (m: ServerMsg) => void = () => {};
   onStatus: (s: Status) => void = () => {};
@@ -59,14 +59,14 @@ export class Net {
   send(m: ClientMsg) {
     if (this.local) { this.local.message(m); return; }
     if (this.ws && this.ws.readyState === 1 && this.status === 'online') this.ws.send(JSON.stringify(m));
-    else if (m.t !== 'input' && m.t !== 'ping') this.queue.push(m);
+    else if (m.t !== 'in' && m.t !== 'ping' && m.t !== 'atk') this.queue.push(m);
   }
 
-  setName(n: string) { this.name = n; store('casse.name', n); this.send({ t: 'name', name: n }); }
+  setName(n: string) { this.name = n; store('nfg.name', n); this.send({ t: 'name', name: n }); }
 
   private receive(m: ServerMsg) {
     if (m.t === 'welcome') {
-      this.id = m.id; this.token = m.token; store('casse.token', m.token);
+      this.id = m.id; this.token = m.token; store('nfg.token', m.token);
       this.setStatus('online');
       const q = this.queue; this.queue = [];
       for (const x of q) this.send(x);

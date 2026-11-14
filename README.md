@@ -1,87 +1,48 @@
-# Le Casse
+# Naufragés
 
-Jeu de braquage coopératif pour 3 à 8 joueurs sur mobile, avec un ou plusieurs indics cachés dans l'équipe.
-Navigateur (lien / PWA), Three.js + Vite + TypeScript, serveur Node (WebSocket).
+Jeu de baston en 3D à la première personne, sur une île déserte, de 2 à 8 joueurs sur mobile (navigateur / PWA).
+Three.js + Vite + TypeScript, serveur Node (WebSocket). Remplace Le Casse (et Ascension) : les anciennes versions
+restent dans l'historique Git.
 
-**État actuel : version 2 — la boucle complète, resserrée.** Un seul but, affiché en permanence avec une flèche :
-1) trouver les 3 morceaux du code dans les zones privées, 2) taper les 6 chiffres à la grille de la chambre forte
-(mauvais code = +10 % de chaleur), 3) porter les sacs jusqu'à la camionnette devant l'entrée avant 3 h (un sac par
-personne, 2 avec le grand sac, pas de course en portant). L'équipe gagne quand le butin visé est chargé ; l'indic
-gagne si la chaleur atteint 100 % ou si 3 h sonnent. Caisse réduite à 7 objets, menu de l'indic à 3 coups,
-explication d'une page (« Comment jouer ») à la place du long tutoriel. Pas d'indic à moins de 3 joueurs.
+**État actuel : étape 1 — l'arène.** L'île (plage, dune, colline, cabane au toit praticable, caisses, rochers,
+palmiers, feu de camp, ponton au-dessus de l'eau, épave au large), la mer cartoon avec écume sur le rivage,
+le déplacement à la première personne (course, saut, double saut, esquive), deux attaques communes en attendant
+les 6 personnages (coup de poing en combo de 3, orbe d'énergie qui explose), la jauge de dégâts en % (plus elle est
+haute, plus on vole loin), la chute dans l'eau = une vie perdue, retour par un rayon de lumière avec 2 s de
+bouclier, 3 vies (réglable 1 à 5), dernier debout gagne, classement, revanche. Parties par code, bots pour
+s'entraîner seul, reconnexion.
 
-**Étape 4 — les zones privées.** Derrière la porte « Personnel » et la porte de service du bar :
-couloirs, salle de surveillance, salle de comptage, bureau du directeur. Portes verrouillées (faux badge, crochetage
-en petit jeu d'adresse, ouverture libre de l'intérieur), vigiles qui font leur ronde avec un cône de vue découpé par
-les murs, caméras qui balaient, jauge « on te voit », chaleur qui monte (repéré par un vigile +10 %, filmé +5 %,
-course entendue, serrure qui claque, alarme de piratage ; gants = moitié). Objets utiles : fumigène (coupe toutes les
-vues 15 s), somnifère (par derrière), tenue de serveur (90 s), brouilleur (caméras à 12 m, 60 s), clé USB (piratage
-court). Les 3 morceaux du code de la chambre forte se trouvent dans le coffre du directeur, l'ordinateur de la
-sécurité et le tiroir du chef comptable. Nouveaux coups de l'indic : vigile prévenu, caméras rallumées, serrure
-renforcée, et le faux code falsifie vraiment un morceau. La chambre forte elle-même s'ouvrira à l'étape 5.
+## Commandes
 
-**Étape 3 — l'indic.** Tirage secret des rôles (nombre annoncé ou secret), menu piégé de la caisse
-(tuyau aux flics, faux code, balise), enveloppe rouge visible, témoins calculés par le serveur (distance, regard,
-obstacles), carnet de preuves, jauge de chaleur, réunion de crise (toilettes ou radio près de l'entrée) avec vote,
-camp révélé, fins de partie (descente de police, indics démasqués, fermeture à 3 h). En solo, un bot peut être l'indic.
-
-**Étape 2 — argent et caisse.** Parties par code, personnage tiré au sort, vue à l'épaule,
-reconnexion (étape 1). Chacun entre avec 500 €, horloge de la nuit (23 h 47 → 3 h), caisse avec les 11 objets
-(prix ±30 % et stocks par nuit), sac, dons d'argent entre joueurs, roulette européenne à plusieurs (vraie bille
-qui tombe sur le numéro tiré par le serveur), machines à sous avec jackpot progressif commun.
-Pas encore d'indic, de vigiles ni de casse : les objets achetés ne font encore rien.
-
-**Voix (ElevenLabs)** : maître de jeu (explication des règles en 8 chapitres, lancée à la première visite et
-via « Le maître de jeu t'explique tout »), narration de la cinématique, croupier (annonces et les 37 numéros),
-caissière, annonce du jackpot, vigile. Fichiers dans `public/res/voix/`.
+- Téléphone (à l'horizontale) : pouce gauche n'importe où à gauche = joystick, glisser à droite = regarder,
+  boutons Frapper / Pouvoir / Saut / Esquive.
+- Ordinateur : clic dans le jeu pour viser à la souris, ZQSD ou WASD pour bouger, clic gauche = frapper,
+  clic droit ou E = pouvoir, Espace = sauter (2 fois en l'air), Maj = esquive.
 
 ## Jouer en ligne avec des amis (hébergement gratuit sur Render)
 
 1. Va sur <https://render.com> et connecte-toi avec ton compte GitHub.
-2. **New +** → **Blueprint** → choisis ce dépôt. Render lit `render.yaml` tout seul.
-3. Clique **Apply**. La première construction prend 3 à 5 minutes.
-4. Render te donne une adresse du type `https://le-casse-xxxx.onrender.com` : c'est le lien du jeu.
-   Ouvre-le sur ton iPhone, crée une partie, envoie le code de 4 lettres à tes potes.
+2. **New +** → **Blueprint** → choisis ce dépôt. Render lit `render.yaml` tout seul. Clique **Apply**.
+3. Render donne une adresse du type `https://naufrages-xxxx.onrender.com` : c'est le lien du jeu.
 
-Si Render refuse le Blueprint, fais-le à la main : **New +** → **Web Service** → ce dépôt, puis
-Build Command `npm install --include=dev && npm run build`, Start Command `npm start`, offre **Free**.
-
-À savoir : avec l'offre gratuite, le serveur s'endort après 15 minutes sans joueur. La première personne qui ouvre
-le lien attend alors environ 50 secondes le temps qu'il se réveille. Chaque nouveau `git push` redéploie le jeu.
+Offre gratuite : le serveur s'endort après 15 minutes sans joueur, le premier à ouvrir le lien attend ~50 s.
 
 ## Lancer en local
 
 ```bash
 npm install
-npm run dev:server   # serveur de jeu sur le port 8787 (à laisser tourner)
-npm run dev          # site sur http://localhost:5173 (dans un 2e terminal)
+npm run dev:server   # serveur de jeu, port 8787
+npm run dev          # site sur http://localhost:5173
 ```
-
-Version de production en local : `npm run build && npm start` puis <http://localhost:8787>.
 Version d'aperçu sans serveur (avec des bots) : `npm run build:solo` → `dist-solo/`.
-
-Paramètres utiles dans l'URL : `?local` (serveur dans la page, avec bots), `?quality=high|medium|low`,
-`?server=wss://autre-serveur/ws`, `?view=hall`, `?shot=0`, `?clean`.
-
-Commandes au clavier : ZQSD / WASD pour marcher, Maj pour courir, souris (clic-glisser) pour tourner la caméra,
-E pour utiliser (caisse, roulette, machine), Espace pour lancer une machine, Échap pour fermer.
-Sur téléphone : pouce gauche = joystick (poussé à fond = course), glisser à droite = caméra.
+Paramètres d'URL : `?local` (serveur dans la page), `?quality=high|medium|low`, `?train` (entraînement direct).
 
 ## Structure
 
-- `shared/` — protocole et cœur du serveur de jeu (salons, tirage des personnages, positions, bots) ;
-  il tourne aussi dans la page pour la version d'aperçu
-- `server/` — serveur Node : sert le site et les parties en WebSocket sur `/ws`
-- `src/net.ts` — connexion, jeton de reconnexion, mode local
-- `shared/items.ts`, `shared/games.ts`, `shared/layout.ts` — objets, règles et cotes des jeux, plan du casino
-- `src/play.ts` — interface de la nuit : argent, horloge, caisse, sac, roulette, machines
-- `shared/secu.ts`, `shared/watch.ts` — plan des zones privées et surveillance côté serveur (vigiles, caméras, portes)
-- `src/secu.ts` — zones privées à l'écran : portes, vigiles, cônes de vue, fumée, crochetage et piratage
-- `src/player.ts` — corps des joueurs (Rocketbox), animations marche/course, interpolation des autres joueurs
-- `src/cam.ts` — plans de cinéma et vue à l'épaule
-- `src/gfx/` — moteur de rendu (post-process, reflets planaires, pluie, textures peintes)
-- `src/world/` — la rue, le hall, les salles, les figurants
-- `public/res/` — modèles et textures (Poly Haven CC0, Microsoft Rocketbox MIT), optimisés pour le mobile
-- `tools/` — scripts de téléchargement / optimisation / emballage des assets
-
-Crédits et licences : voir `CREDITS.md`. Les anciennes versions d'Ascension restent dans l'historique Git.
+- `shared/island.ts` — l'île : relief, obstacles, points d'apparition (commun au serveur et à la page)
+- `shared/fight.ts` — physique des combattants et règles des coups
+- `shared/core.ts` — serveur de jeu : salons, manches, coups, éjections, bots
+- `shared/protocol.ts` — messages
+- `server/` — serveur Node (site + WebSocket `/ws`)
+- `src/world.ts` — l'île à l'écran (ciel, mer, décor) · `src/fx.ts` — effets des sorts
+- `src/avatars.ts` — combattants provisoires et gants à la 1re personne · `src/main.ts` — menus, combat, HUD
