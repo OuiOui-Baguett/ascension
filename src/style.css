@@ -141,3 +141,19 @@ input { font: inherit; }
   .menu.wide { width: min(780px, 100%); display: grid; grid-template-columns: 1fr 1.15fr; gap: 14px; align-items: start; }
   .menu.wide #l-players { grid-template-columns: 1fr; }
 }
+
+/* ---------- classes ---------- */
+.classes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.classes button { padding: 6px 8px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; color: var(--ink); text-align: left; line-height: 1.1; box-shadow: 0 3px 0 var(--ink); }
+.classes button b { display: block; font-size: 17px; color: var(--k); -webkit-text-stroke: .6px var(--ink); }
+.classes button small { display: block; font-size: 11.5px; opacity: .75; font-family: system-ui, sans-serif; }
+.classes button em { display: block; font-style: normal; font-size: 11px; opacity: .6; font-family: system-ui, sans-serif; }
+.classes button.on { background: color-mix(in srgb, var(--k) 22%, #fff); box-shadow: 0 3px 0 var(--ink), inset 0 0 0 2px var(--k); }
+.cls-desc { margin: 0; font-family: system-ui, sans-serif; font-size: 12px; line-height: 1.35; opacity: .85; }
+.cls-desc i { display: block; font-style: normal; opacity: .75; margin-top: 2px; }
+#b-ult { right: 210px; bottom: 150px; background: #ffe9a8; font-size: 11.5px; }
+#b-ult .cd { background: conic-gradient(rgba(27,21,48,.55) var(--p, 100%), transparent 0); }
+#b-ult.ready { background: var(--yellow); animation: ultpulse .9s ease-in-out infinite; }
+@keyframes ultpulse { 50% { box-shadow: 0 5px 0 var(--ink), 0 0 22px 6px rgba(255,210,63,.9); } }
+@media (pointer: fine) { #lockhint::after { content: ' · E pouvoir · R ultime'; } }
+@media (max-height: 460px) { .classes button { padding: 4px 8px; } .classes button em { display: none; } }

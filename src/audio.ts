@@ -51,4 +51,9 @@ export const sfx = {
   beep: (hi = false) => tone(hi ? .4 : .15, 'square', hi ? 880 : 520, hi ? 880 : 520, .09),
   ko: () => { tone(.5, 'triangle', 600, 150, .2); tone(.5, 'triangle', 450, 110, .15, .08); },
   win: () => [523, 659, 784, 1046].forEach((f, i) => tone(.3, 'triangle', f, f, .15, i * .12)),
+  fire: () => { noise(.18, 'bandpass', 1800, 500, .16, 1.4); tone(.12, 'sawtooth', 300, 140, .05); },
+  pop: (near = 1) => { noise(.2, 'lowpass', 2200, 300, .3 * near); tone(.15, 'sine', 160, 60, .25 * near); },
+  geyser: (near = 1) => { noise(.9, 'bandpass', 400, 1600, .5 * near, .8); tone(.6, 'sawtooth', 70, 140, .12 * near); },
+  incoming: () => { tone(1.2, 'sine', 1400, 300, .1); noise(1.2, 'bandpass', 3000, 600, .08, 3); },
+  rumble: (near = 1) => { noise(.6, 'lowpass', 500, 80, .6 * near); tone(.5, 'sine', 60, 35, .4 * near); },
 };

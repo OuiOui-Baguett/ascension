@@ -23,6 +23,7 @@ export class Input {
       if (e.code === 'Space') { this.pressed.add('jump'); e.preventDefault(); }
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.pressed.add('dash');
       if (e.code === 'KeyE' || e.code === 'KeyF') this.pressed.add('blast');
+      if (e.code === 'KeyR') this.pressed.add('ult');
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());

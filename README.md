@@ -4,7 +4,15 @@ Jeu de baston en 3D à la première personne, sur une île déserte, de 2 à 8 j
 Three.js + Vite + TypeScript, serveur Node (WebSocket). Remplace Le Casse (et Ascension) : les anciennes versions
 restent dans l'historique Git.
 
-**État actuel : étape 1 bis — l'arène améliorée.** Île agrandie d'un tiers (murets en ruine, caisses, rochers et
+**État actuel : étape 2 — les classes et la grande île.** Deux classes jouables (sur six prévues) :
+**Brasier** (feu, distance, poids moyen — boules de feu, Pouvoir « Geyser » de lave là où on vise avec cercle d'alerte,
+Ultime « Météore » qui tombe du ciel) et **Colosse** (roche, corps à corps, lourd et plus lent — gros poings en combo,
+Pouvoir « Mur » de roche qui bloque et repousse, Ultime « Séisme » qui fait décoller ceux qui touchent terre).
+L'Ultime se charge en touchant les autres (et un peu avec le temps). Île presque deux fois plus grande : camp,
+colline, ruines du temple, palmeraie, docks et ponton, îlot du phare relié par un pont de corde. Ombres qui suivent
+le joueur, freinage de visée au tactile. Choix de la classe sur l'accueil et dans le salon (les bots alternent).
+
+**Étape 1 bis — l'arène améliorée.** Île agrandie d'un tiers (murets en ruine, caisses, rochers et
 palmiers en plus), colline retexturée (herbe au sommet, roche sur les flancs), modes de jeu **Chacun pour soi**,
 **Duos** (les potes ensemble, pas de coups entre coéquipiers) et **Potes contre bots**, flèche verte au-dessus des
 coéquipiers, caméra qui suit son coéquipier quand on est à l'eau. Téléphone : boutons en arc autour du pouce
@@ -49,7 +57,7 @@ Paramètres d'URL : `?local` (serveur dans la page), `?quality=high|medium|low`,
 ## Structure
 
 - `shared/island.ts` — l'île : relief, obstacles, points d'apparition (commun au serveur et à la page)
-- `shared/fight.ts` — physique des combattants et règles des coups
+- `shared/fight.ts` — physique des combattants · `shared/classes.ts` — les classes et leurs coups
 - `shared/core.ts` — serveur de jeu : salons, manches, coups, éjections, bots
 - `shared/protocol.ts` — messages
 - `server/` — serveur Node (site + WebSocket `/ws`)

@@ -4,6 +4,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { toon, outline } from './world';
+import type { ClassId } from '../shared/classes';
 
 export const COLORS = ['#ff5a5f', '#2ec4b6', '#ffd23f', '#9b5de5', '#7bd63a', '#ff9f1c', '#ff6fb5', '#3a86ff'];
 export const colorOf = (i: number) => new THREE.Color(COLORS[i % COLORS.length]);
@@ -24,7 +25,8 @@ export class Fighter {
   private label: THREE.Sprite; private shield: THREE.Mesh; private lastLabel = '';
   private ally: THREE.Sprite | null = null;
   private walk = 0; private punchT = 0; private punchSide = 1; private blastT = 0; private tumble = 0;
-  constructor(scene: THREE.Scene, public name: string, color: number) {
+  private flame: THREE.Mesh | null = null;
+  constructor(scene: THREE.Scene, public name: string, color: number, cls: ClassId = 'brasier') {
     const c = colorOf(color), mat = toon(c), belly = toon(c.clone().lerp(new THREE.Color('#fff4dc'), .55)), dark = toon('#1b1530');
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.42, .62, 6, 14), mat); torso.position.y = .95; outline(torso, .05); this.body.add(torso);
     const bel = new THREE.Mesh(new THREE.SphereGeometry(.34, 14, 10), belly); bel.scale.set(1, 1.15, .55); bel.position.set(0, .85, .2); this.body.add(bel);
@@ -35,7 +37,16 @@ export class Fighter {
     }
     // bandeau de combat
     const band = new THREE.Mesh(new THREE.TorusGeometry(.4, .05, 6, 24), toon('#1b1530')); band.rotation.x = Math.PI / 2; band.position.y = 1.5; this.body.add(band);
-    this.handL = new THREE.Mesh(new THREE.SphereGeometry(.15, 12, 10), mat); this.handR = this.handL.clone();
+    // signes de la classe : flamme sur la tête (Brasier), épaulettes de roche et gros poings (Colosse)
+    if (cls === 'brasier') {
+      this.flame = new THREE.Mesh(new THREE.ConeGeometry(.16, .5, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 1.5, .25) }));
+      this.flame.position.y = 1.78; this.body.add(this.flame);
+    } else {
+      for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.DodecahedronGeometry(.22), toon('#9b8670')); p.position.set(s * .42, 1.28, 0); outline(p, .08); this.body.add(p); }
+      this.body.scale.setScalar(1.12);
+    }
+    const handMat = cls === 'colosse' ? toon('#9b8670') : mat;
+    this.handL = new THREE.Mesh(new THREE.SphereGeometry(cls === 'colosse' ? .22 : .15, 12, 10), handMat); this.handR = this.handL.clone();
     outline(this.handL, .1); outline(this.handR, .1); this.body.add(this.handL, this.handR);
     for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(.15, 10, 8), dark); f.scale.set(1, .6, 1.4); f.position.set(s * .2, .08, .05); this.feet.push(f); this.body.add(f); }
     this.body.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
@@ -61,10 +72,11 @@ export class Fighter {
     }
     if (this.ally) this.ally.visible = on;
   }
-  attack(k: 'punch' | 'blast') { if (k === 'punch') { this.punchT = .22; this.punchSide *= -1; } else this.blastT = .35; }
+  attack(k: string) { if (k === 'atk') { this.punchT = .22; this.punchSide *= -1; } else this.blastT = .35; }
   update(dt: number, speed: number, ground: boolean, stun: boolean, shield: boolean, visible: boolean) {
     this.root.visible = visible;
     if (!visible) return;
+    if (this.flame) { const k = 1 + Math.sin(performance.now() / 60) * .15; this.flame.scale.set(1, k, 1); }
     this.walk += dt * speed * 2.2;
     const bob = ground ? Math.abs(Math.sin(this.walk)) * .08 * Math.min(1, speed / 3) : 0;
     this.body.position.y = bob;
@@ -88,8 +100,8 @@ export class Fighter {
 export class Viewmodel {
   group = new THREE.Group(); private hands: THREE.Group[] = [];
   private t = 0; private punchT = [0, 0]; private side = 0; private blastT = 0; private charge: THREE.Mesh;
-  constructor(camera: THREE.Camera, color: number) {
-    const c = colorOf(color);
+  constructor(camera: THREE.Camera, color: number, private cls: ClassId = 'brasier') {
+    const c = cls === 'colosse' ? new THREE.Color('#9b8670') : colorOf(color);
     // gants de boxe cartoon : gros poing, pouce, bande blanche
     for (const s of [-1, 1]) {
       const h = new THREE.Group();
@@ -101,10 +113,14 @@ export class Viewmodel {
       const ol = outline(fist, .08); (ol.material as THREE.Material).depthTest = false;
       for (const m of [fist, thumb, band, shine]) m.renderOrder = 1000;
       ol.renderOrder = 999;
-      h.add(fist, thumb, band, shine); h.userData.s = s; h.scale.setScalar(.72);
+      h.add(fist, thumb, band, shine); h.userData.s = s; h.scale.setScalar(cls === 'colosse' ? .95 : .72);
+      if (cls === 'brasier') {   // mains en feu
+        const fl = new THREE.Mesh(new THREE.SphereGeometry(.15, 12, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.5, 1.2, .2), transparent: true, opacity: .35, depthTest: false, blending: THREE.AdditiveBlending }));
+        fl.renderOrder = 1001; h.add(fl); h.userData.fl = fl;
+      }
       this.hands.push(h); this.group.add(h);
     }
-    this.charge = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 10), new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(4), depthTest: false, transparent: true }));
+    this.charge = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 10), new THREE.MeshBasicMaterial({ color: (cls === 'brasier' ? new THREE.Color(4, 1.5, .3) : new THREE.Color(2.5, 2, 1.2)), depthTest: false, transparent: true }));
     this.charge.renderOrder = 1000; this.group.add(this.charge);
     camera.add(this.group);
   }
@@ -122,6 +138,7 @@ export class Viewmodel {
       const s = h.userData.s as number;
       h.position.set(s * (.31 - k * .2 - bk * .2) + sway, -.3 + bob + k * .13 + bk * .1, -.64 - k * .32 - bk * .15);
       h.rotation.set(-.15 - k * .25, s * (.35 - k * .3), s * -.25);
+      const fl = h.userData.fl as THREE.Mesh | undefined; if (fl) fl.scale.setScalar(1 + Math.sin(this.t * 9 + s) * .15 + k * .4);
     });
     this.charge.visible = bk > 0;
     if (bk > 0) { this.charge.position.set(0, -.17, -.78); this.charge.scale.setScalar(.5 + bk * 2.2); }

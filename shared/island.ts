@@ -1,36 +1,60 @@
 // ============================================================
 // L'île : relief, obstacles, points d'apparition. Partagé entre le serveur
 // (physique, chute dans l'eau) et la page (dessin) : les deux voient la même île.
+// Zones : camp au centre, colline au nord-est, ruines à l'est, palmeraie à l'ouest,
+// docks et ponton au sud, et l'îlot du phare au nord, relié par un pont de corde.
 // ============================================================
 
 /** Sous cette hauteur des pieds, on est dans l'eau profonde : éjecté. */
 export const DROWN_Y = -0.9;
 
-/** Taille de l'île (1 = première version ; agrandie d'un tiers). */
-export const ISLE = 1.35;
+/** Taille de l'île principale (1 = première version). */
+export const ISLE = 1.9;
+const S = ISLE;
 /** Rayon du rivage selon l'angle (côte découpée). La mer à l'écran utilise la même formule. */
 export function shoreR(a: number) {
-  return ISLE * (15.5 + 2.0 * Math.sin(3 * a + 1.2) + 1.1 * Math.sin(5 * a + 0.4) + 0.6 * Math.sin(9 * a + 2));
+  return S * (15.5 + 2.0 * Math.sin(3 * a + 1.2) + 1.1 * Math.sin(5 * a + 0.4) + 0.6 * Math.sin(9 * a + 2));
 }
-const S = ISLE;
+/** L'îlot du phare, au nord. */
+export const ISLET = { x: 0, z: 46, r: 9 };
+export function isletR(a: number) { return ISLET.r + .7 * Math.sin(4 * a) + .35 * Math.sin(7 * a + 1); }
 const ss = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 /** La colline rocheuse (point haut de l'île). */
-export const HILL = { x: 6 * S, z: -5.5 * S, h: 2.9 };
+export const HILL = { x: 6 * S, z: -5.5 * S, h: 3.6 };
 
-/** Hauteur du sol (sable, dune, colline ; sous l'eau au-delà du rivage). */
-export function terrainH(x: number, z: number) {
+function beach(r: number, R: number) {
+  const d = r / R;
+  if (d < 0.8) return 0.55;
+  if (d < 1) return 0.55 - (d - 0.8) / 0.2 * 0.75;            // la plage descend jusqu'à l'eau
+  return Math.max(-6, -0.2 - (r - R) * 0.95);                 // puis ça plonge vite
+}
+/** Relief de l'île principale seule. */
+export function mainH(x: number, z: number) {
   const r = Math.hypot(x, z), R = shoreR(Math.atan2(z, x)), d = r / R;
-  let h: number;
-  if (d < 0.8) h = 0.55;
-  else if (d < 1) h = 0.55 - (d - 0.8) / 0.2 * 0.75;            // la plage descend jusqu'à l'eau
-  else h = Math.max(-6, -0.2 - (r - R) * 0.95);                // puis ça plonge vite
-  h += 0.35 * ss(0.62, 0.2, d) * (1 + 0.4 * Math.sin(x * .7) * Math.cos(z * .6));   // dune herbeuse au centre
-  h += HILL.h * ss(6, 2, Math.hypot(x - HILL.x, z - HILL.z));                     // colline
+  let h = beach(r, R);
+  h += 0.45 * ss(0.62, 0.15, d) * (1 + 0.4 * Math.sin(x * .45) * Math.cos(z * .4));  // dune herbeuse au centre
+  h += HILL.h * ss(7.5, 2.4, Math.hypot(x - HILL.x, z - HILL.z));                  // colline
   return h;
 }
+/** Relief de l'îlot seul. */
+export function isletH(x: number, z: number) {
+  const ix = x - ISLET.x, iz = z - ISLET.z, ir = Math.hypot(ix, iz);
+  return beach(ir, isletR(Math.atan2(iz, ix))) + .5 * ss(5, 1, ir);
+}
+/** Hauteur du sol (sable, dune, colline ; sous l'eau au-delà du rivage). */
+export function terrainH(x: number, z: number) {
+  const h = mainH(x, z);
+  return Math.hypot(x - ISLET.x, z - ISLET.z) < ISLET.r + 9 ? Math.max(h, isletH(x, z)) : h;
+}
+/** Le centre de la terre la plus proche (île ou îlot) et à quel point on est près du bord (1 = rivage). */
+export function nearestLand(x: number, z: number) {
+  const dm = Math.hypot(x, z) / shoreR(Math.atan2(z, x));
+  const di = Math.hypot(x - ISLET.x, z - ISLET.z) / isletR(Math.atan2(z - ISLET.z, x - ISLET.x));
+  return di < dm ? { x: ISLET.x, z: ISLET.z, edge: di } : { x: 0, z: 0, edge: dm };
+}
 
-/** Obstacles : cylindres (palmiers, rochers) et boîtes (cabane, caisses, ponton). top = hauteur absolue. */
+/** Obstacles : cylindres (palmiers, rochers, colonnes) et boîtes (cabane, caisses, ponton, pont). top = hauteur absolue. */
 export type Solid =
   | { k: 'c'; x: number; z: number; r: number; base: number; top: number; tag: string }
   | { k: 'b'; x0: number; z0: number; x1: number; z1: number; base: number; top: number; tag: string };
@@ -40,60 +64,79 @@ const cyl = (x: number, z: number, r: number, h: number, tag: string): Solid => 
 };
 const box = (cx: number, cz: number, w: number, d: number, h: number, tag: string, top?: number): Solid => {
   const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
-  const g = Math.min(terrainH(x0, z0), terrainH(x1, z0), terrainH(x0, z1), terrainH(x1, z1), terrainH(cx, cz));
-  const gm = Math.max(terrainH(x0, z0), terrainH(x1, z0), terrainH(x0, z1), terrainH(x1, z1), terrainH(cx, cz));
-  return { k: 'b', x0, z0, x1, z1, base: g - 1, top: top ?? gm + h, tag };
+  const pts = [terrainH(x0, z0), terrainH(x1, z0), terrainH(x0, z1), terrainH(x1, z1), terrainH(cx, cz)];
+  return { k: 'b', x0, z0, x1, z1, base: Math.min(...pts) - 1, top: top ?? Math.max(...pts) + h, tag };
 };
 
-export const PALMS: [number, number, number][] = ([[-9.5, -2.5, .2], [3.5, 8.5, 2.1], [-2.5, -11, 4.1], [11.5, 3.5, 1.2], [-11.2, 6.8, 5.3], [9.8, -11, 3.3], [-6, -12.6, .9], [13.2, -3.6, 2.6], [-1, 13.3, 4.6]] as [number, number, number][]).map(([x, z, k]) => [x * S, z * S, k]);
+export const PALMS: [number, number, number][] = [
+  // palmeraie à l'ouest
+  [-19, -5, .2], [-22.5, -1, 1.7], [-17, 1.5, 3.1], [-21, 5, 4.4], [-24.5, -6.5, 5.2], [-18.5, -10, .7],
+  // ailleurs
+  [6.5, 16, 2.1], [-4.8, -21, 4.1], [21.8, 6.6, 1.2], [-11.5, -24, .9], [25, -6.8, 2.6], [-1.9, 25.2, 4.6], [14, 20, 3.4],
+  // îlot
+  [ISLET.x - 4.5, ISLET.z + 1.5, 1.4], [ISLET.x + 5, ISLET.z - 2.5, 3.9],
+];
 const PIER_A = -Math.PI / 2;
 const pierR = shoreR(PIER_A);
-export const PIER = { a: PIER_A, r0: pierR - 2.5, r1: pierR + 7, w: 2.2, top: 0.8 };
+export const PIER = { a: PIER_A, r0: pierR - 2.5, r1: pierR + 8, w: 2.4, top: 0.8 };
+/** Le pont de corde vers l'îlot (axe z, x = 0). */
+export const BRIDGE = { x: 0, z0: shoreR(Math.PI / 2) - 2.5, z1: ISLET.z - isletR(-Math.PI / 2) + 2.2, w: 2.2, top: .9 };
+export const LIGHTHOUSE = { x: ISLET.x + 1.5, z: ISLET.z + 2.5, r: 1.8, h: 10 };
+export const CABIN = { x: -11.4, z: 8 };
 
 export const SOLIDS: Solid[] = [
-  // la cabane (toit plat praticable) et ses caisses pour y grimper
-  box(-6 * S, 4.2 * S, 3.4, 3.0, 2.45, 'cabane'),
-  box(-6 * S + 2.25, 4.2 * S + 1.1, 1, 1, .95, 'caisse'),
-  box(-6 * S + 2.25, 4.2 * S + 2.15, 1, 1, 1.75, 'caisse2'),
-  box(-6 * S - .6, 4.2 * S - 2.25, 1, 1, .95, 'caisse'),
-  // caisses près du ponton
-  box(1.8, -12.6 * S + 1.4, 1, 1, .95, 'caisse'), box(2.85, -12.6 * S + 1.2, 1, 1, .95, 'caisse'),
-  // murets en ruine pour se cacher
-  box(9.5 * S, 1.8 * S, .7, 3.2, 1.25, 'muret'), box(-4 * S, -7.6 * S, 3.4, .7, 1.25, 'muret'), box(-12.3 * S, -2.6 * S, .7, 2.6, 1.05, 'muret'),
-  // rochers
-  cyl(8.2 * S, 6.4 * S, 1.5, 1.15, 'rocher'), cyl(-9.4 * S, -7 * S, 1.25, .95, 'rocher'), cyl(1.6 * S, 11.2 * S, 1, .75, 'rocher'),
-  cyl(-12.4 * S, 1.2 * S, 1.05, .85, 'rocher'), cyl(4.2 * S, -1.8 * S, .8, .6, 'rocher'), cyl(-5 * S, 10.6 * S, 1.3, 1, 'rocher'), cyl(12.6 * S, -7.8 * S, 1.1, .8, 'rocher'),
-  // feu de camp au centre
+  // le camp : cabane (toit plat praticable) et caisses pour y grimper
+  box(CABIN.x, CABIN.z, 3.4, 3.0, 2.45, 'cabane'),
+  box(CABIN.x + 2.25, CABIN.z + 1.1, 1, 1, .95, 'caisse'),
+  box(CABIN.x + 2.25, CABIN.z + 2.15, 1, 1, 1.75, 'caisse2'),
+  box(CABIN.x - .6, CABIN.z - 2.25, 1, 1, .95, 'caisse'),
   cyl(-1.2, 1.4, .75, .35, 'feu'),
+  // docks au sud
+  box(2.2, -pierR + 4.5, 1, 1, .95, 'caisse'), box(3.3, -pierR + 4.2, 1, 1, .95, 'caisse'), box(2.7, -pierR + 5.4, 1, 1, 1.75, 'caisse2'),
+  box(-3.2, -pierR + 4, 1, 1, .95, 'caisse'),
+  // ruines du temple, à l'est
+  box(17.5, 3.4, .7, 3.6, 1.25, 'muret'), box(21.5, -1.2, 3.6, .7, 1.25, 'muret'), box(22.8, 6.2, 2.6, .7, 1.05, 'muret'),
+  cyl(19.4, -3.4, .55, 3.2, 'colonne'), cyl(24.2, 1.8, .55, 3.2, 'colonne'), cyl(19.6, 8.4, .55, 1.3, 'colonne'), cyl(24.6, -3.6, .55, .9, 'colonne'),
+  // murets épars
+  box(-7.6, -14.4, 3.4, .7, 1.25, 'muret'), box(-23.4, -3.4, .7, 2.6, 1.05, 'muret'), box(4, 13.5, 3, .7, 1.1, 'muret'),
+  // rochers
+  cyl(15.6, 12.2, 1.6, 1.25, 'rocher'), cyl(-17.9, -13.3, 1.3, 1, 'rocher'), cyl(3, 21.3, 1.1, .8, 'rocher'),
+  cyl(8, -3.4, .9, .65, 'rocher'), cyl(-9.5, 20.1, 1.4, 1.05, 'rocher'), cyl(24, -14.8, 1.2, .9, 'rocher'),
+  cyl(-26.3, 10.5, 1.2, .9, 'rocher'), cyl(9.6, -21.5, 1.5, 1.1, 'rocher'), cyl(-4, 7.5, .8, .55, 'rocher'),
+  // îlot : phare et coffre
+  cyl(LIGHTHOUSE.x, LIGHTHOUSE.z, LIGHTHOUSE.r, LIGHTHOUSE.h, 'phare'),
+  box(ISLET.x - 3, ISLET.z - 3.5, 1.2, .8, .8, 'coffre'),
   // palmiers
   ...PALMS.map(([x, z]) => cyl(x, z, .3, 6, 'palmier')),
 ];
-// le ponton qui avance au-dessus de l'eau
-{
-  const c = Math.cos(PIER.a), s = Math.sin(PIER.a), mid = (PIER.r0 + PIER.r1) / 2, len = PIER.r1 - PIER.r0;
-  // plein sud, aligné sur l'axe z
-  const cx = c * mid, cz = s * mid;
-  SOLIDS.push({ k: 'b', x0: cx - PIER.w / 2, x1: cx + PIER.w / 2, z0: cz - len / 2, z1: cz + len / 2, base: -3, top: PIER.top, tag: 'ponton' });
+{ // le ponton qui avance au-dessus de l'eau, plein sud
+  const mid = (PIER.r0 + PIER.r1) / 2, len = PIER.r1 - PIER.r0;
+  SOLIDS.push({ k: 'b', x0: -PIER.w / 2, x1: PIER.w / 2, z0: -mid - len / 2, z1: -mid + len / 2, base: -3, top: PIER.top, tag: 'ponton' });
+  SOLIDS.push({ k: 'b', x0: BRIDGE.x - BRIDGE.w / 2, x1: BRIDGE.x + BRIDGE.w / 2, z0: BRIDGE.z0, z1: BRIDGE.z1, base: -3, top: BRIDGE.top, tag: 'pont' });
 }
+
+/** Obstacles temporaires (murs de roche du Colosse) : ajoutés et retirés pendant la manche. */
+export const DYN: Solid[] = [];
 
 /** Points d'apparition (cercle autour du centre), décalés s'ils tombent dans un obstacle. */
 export const SPAWNS = Array.from({ length: 8 }, (_, i) => {
-  for (let k = 0; k < 40; k++) {
-    const a = i / 8 * Math.PI * 2 + .3 + k * .05 * (k % 2 ? 1 : -1), r = 7.5 * S - (k % 5) * .4, x = Math.cos(a) * r, z = Math.sin(a) * r;
-    const free = SOLIDS.every(s => s.k === 'c' ? Math.hypot(x - s.x, z - s.z) > s.r + 1.2 : x < s.x0 - 1.2 || x > s.x1 + 1.2 || z < s.z0 - 1.2 || z > s.z1 + 1.2);
-    if (free && Math.hypot(x - HILL.x, z - HILL.z) > 4.5) return { x, z };
+  for (let k = 0; k < 60; k++) {
+    const a = i / 8 * Math.PI * 2 + .3 + k * .05 * (k % 2 ? 1 : -1), r = 13 - (k % 5) * .6, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const free = SOLIDS.every(s => s.k === 'c' ? Math.hypot(x - s.x, z - s.z) > s.r + 1.4 : x < s.x0 - 1.4 || x > s.x1 + 1.4 || z < s.z0 - 1.4 || z > s.z1 + 1.4);
+    if (free && Math.hypot(x - HILL.x, z - HILL.z) > 6) return { x, z };
   }
   return { x: 0, z: 0 };
 });
 
 const inBox = (s: Extract<Solid, { k: 'b' }>, x: number, z: number, m = 0) => x >= s.x0 - m && x <= s.x1 + m && z >= s.z0 - m && z <= s.z1 + m;
+const inside = (s: Solid, x: number, z: number) => s.k === 'c' ? (x - s.x) ** 2 + (z - s.z) ** 2 <= s.r * s.r : inBox(s, x, z);
 
 /** Hauteur du sol sous (x, z) pour quelqu'un dont les pieds sont à y (on monte une marche de `step`). */
 export function groundAt(x: number, z: number, y: number, step = 0.45) {
   let g = terrainH(x, z);
-  for (const s of SOLIDS) {
+  for (const L of [SOLIDS, DYN]) for (const s of L) {
     if (s.top > y + step || s.top <= g) continue;
-    if (s.k === 'c' ? (x - s.x) ** 2 + (z - s.z) ** 2 <= s.r * s.r : inBox(s, x, z)) g = s.top;
+    if (inside(s, x, z)) g = s.top;
   }
   return g;
 }
@@ -101,7 +144,7 @@ export function groundAt(x: number, z: number, y: number, step = 0.45) {
 /** Repousse un corps (rayon r, pieds y, taille h) hors des obstacles plus hauts qu'une marche. */
 export function pushOut(p: { x: number; z: number }, y: number, r: number, h: number, step = 0.45) {
   let hit = false;
-  for (const s of SOLIDS) {
+  for (const L of [SOLIDS, DYN]) for (const s of L) {
     if (s.top <= y + step || s.base >= y + h) continue;
     if (s.k === 'c') {
       const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz), m = s.r + r;
@@ -115,16 +158,25 @@ export function pushOut(p: { x: number; z: number }, y: number, r: number, h: nu
   return hit;
 }
 
+/** Un point est-il dans le relief ou un obstacle ? */
+export function solidAt(x: number, y: number, z: number) {
+  if (y < terrainH(x, z)) return true;
+  for (const L of [SOLIDS, DYN]) for (const s of L) if (y <= s.top && y >= s.base && inside(s, x, z)) return true;
+  return false;
+}
 /** Un segment touche-t-il un obstacle ou le relief ? (projectiles, lignes de tir des bots) */
 export function segBlocked(ax: number, ay: number, az: number, bx: number, by: number, bz: number) {
   const n = Math.ceil(Math.hypot(bx - ax, by - ay, bz - az) / .3);
-  for (let i = 1; i <= n; i++) {
-    const t = i / n, x = ax + (bx - ax) * t, y = ay + (by - ay) * t, z = az + (bz - az) * t;
-    if (y < terrainH(x, z)) return true;
-    for (const s of SOLIDS) {
-      if (y > s.top || y < s.base) continue;
-      if (s.k === 'c' ? (x - s.x) ** 2 + (z - s.z) ** 2 <= s.r * s.r : inBox(s, x, z)) return true;
-    }
-  }
+  for (let i = 1; i <= n; i++) { const t = i / n; if (solidAt(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t)) return true; }
   return false;
+}
+/** Le point visé : là où la ligne de visée touche le sol ou un obstacle (au plus loin `max`), posé au sol. */
+export function aimPoint(ex: number, ey: number, ez: number, dx: number, dy: number, dz: number, max: number) {
+  let x = ex, y = ey, z = ez;
+  for (let t = .3; t <= max; t += .3) {
+    x = ex + dx * t; y = ey + dy * t; z = ez + dz * t;
+    if (solidAt(x, y, z)) break;
+  }
+  const g = groundAt(x, z, y + .5, 1);
+  return { x, y: g, z };
 }

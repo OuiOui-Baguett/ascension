@@ -5,7 +5,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { shoreR, terrainH, SOLIDS, PALMS, PIER, HILL, ISLE, type Solid } from '../shared/island';
+import { shoreR, terrainH, mainH, isletH, isletR, SOLIDS, PALMS, HILL, ISLE, ISLET, LIGHTHOUSE, type Solid } from '../shared/island';
 
 const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
 
@@ -77,7 +77,7 @@ const planks = (base: string, dark: string, n: number, vertical = true) => canva
 });
 
 // ---------------------------------------------------------------
-export interface World { update(t: number, dt: number): void; sun: THREE.DirectionalLight }
+export interface World { update(t: number, dt: number): void; sun: THREE.DirectionalLight; follow(x: number, z: number): void }
 
 export function buildWorld(scene: THREE.Scene, quality: string): World {
   const anim: ((t: number, dt: number) => void)[] = [];
@@ -110,7 +110,7 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
   sun.castShadow = quality !== 'low';
   const sm = quality === 'high' ? 2048 : 1024;
   sun.shadow.mapSize.set(sm, sm);
-  Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 10, far: 140 });
+  Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 10, far: 140 });
   sun.shadow.bias = -.0006; sun.shadow.normalBias = .04;
   scene.add(sun, sun.target);
 
@@ -123,10 +123,10 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
     const hn = (x: number, z: number) => Math.sin(x * 1.7 + z * .3) * Math.cos(z * 1.3 - x * .4);
     for (let i = 0; i <= RINGS; i++) for (let j = 0; j < A; j++) {
       const a = j / A * Math.PI * 2, R = shoreR(a), r = R * ring(i);
-      const x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z), d = r / R;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r, h = mainH(x, z), d = r / R;
       pos.push(x, h, z);
       // pente : sert à mettre de la roche sur les flancs de la colline
-      const e = .3, sl = Math.hypot(terrainH(x + e, z) - terrainH(x - e, z), terrainH(x, z + e) - terrainH(x, z - e)) / (2 * e);
+      const e = .3, sl = Math.hypot(mainH(x + e, z) - mainH(x - e, z), mainH(x, z + e) - mainH(x, z - e)) / (2 * e);
       const n = hn(x, z);
       let c = sand.clone().lerp(sand2, .5 + n * .5);
       if (d > .93) c = wet.clone().lerp(c, Math.max(0, (1 - d) * 12));
@@ -148,6 +148,23 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
     const m = new THREE.Mesh(g, toon('#ffffff', { vertexColors: true }));
     m.receiveShadow = true; scene.add(m);
   }
+  // ---------- l'îlot du phare ----------
+  {
+    const A = 72, RINGS = 22, pos: number[] = [], col: number[] = [], idx: number[] = [];
+    const sand = new THREE.Color('#f7dca4'), wet = new THREE.Color('#dcb67c'), grass = new THREE.Color('#79cf4b');
+    for (let i = 0; i <= RINGS; i++) for (let j = 0; j < A; j++) {
+      const a = j / A * Math.PI * 2, R = isletR(a), u = i / RINGS, r = R * (u < .7 ? u / .7 * .8 : .8 + (u - .7) / .3 * .7);
+      const x = ISLET.x + Math.cos(a) * r, z = ISLET.z + Math.sin(a) * r, d = r / R;
+      pos.push(x, isletH(x, z), z);
+      const c = d < .45 ? grass.clone().lerp(sand, Math.max(0, (d - .35) * 10)) : d > .93 ? wet.clone().lerp(sand, Math.max(0, (1 - d) * 12)) : sand.clone();
+      col.push(c.r, c.g, c.b);
+    }
+    for (let i = 0; i < RINGS; i++) for (let j = 0; j < A; j++) { const j2 = (j + 1) % A; idx.push(i * A + j, (i + 1) * A + j, i * A + j2, i * A + j2, (i + 1) * A + j, (i + 1) * A + j2); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, toon('#ffffff', { vertexColors: true })); m.receiveShadow = true; scene.add(m);
+  }
 
   // ---------- la mer ----------
   {
@@ -165,7 +182,7 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
           gl_Position = projectionMatrix * viewMatrix * vec4(vW,1.);
         }`,
       fragmentShader: `uniform float t; uniform vec3 sun; uniform vec3 fogC; varying vec3 vW; varying float vH;
-        const float ISLE = ${ISLE.toFixed(3)};
+        const float ISLE = ${ISLE.toFixed(3)}; const vec3 ISL = vec3(${ISLET.x.toFixed(2)}, ${ISLET.z.toFixed(2)}, ${ISLET.r.toFixed(2)});
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
         float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
           return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
@@ -173,6 +190,8 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
           float a = atan(vW.z, vW.x), r = length(vW.xz);
           float R = ISLE * (15.5 + 2.0*sin(3.*a+1.2) + 1.1*sin(5.*a+.4) + .6*sin(9.*a+2.));
           float d = r - R * .985;                       // distance au rivage (m)
+          vec2 io = vW.xz - ISL.xy; float ia = atan(io.y, io.x);
+          d = min(d, length(io) - (ISL.z + .7*sin(4.*ia) + .35*sin(7.*ia+1.)) * .985);   // et à celui de l'îlot
           vec3 lagoon = vec3(.25,.92,.86), mid = vec3(.08,.66,.84), deep = vec3(.06,.38,.72), far = vec3(.05,.3,.62);
           vec3 c = mix(lagoon, mid, smoothstep(0., 4., d));
           c = mix(c, deep, smoothstep(4., 16., d));
@@ -320,6 +339,28 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
         m.position.set(cx, g + hh * (i + .5), cz); m.rotation.y = i * .12; outline(m, .03); shade(m); scene.add(m);
       }
       void n;
+    } else if (s.tag === 'pont') {
+      // pont de corde vers l'îlot : planches, poteaux, cordes
+      const deck = new THREE.Group(), N = Math.round(d / .42);
+      for (let i = 0; i < N; i++) {
+        const p = new THREE.Mesh(new THREE.BoxGeometry(w, .1, .36), toon(i % 2 ? '#c08850' : '#a87443'));
+        p.position.set(cx + (rnd() - .5) * .06, s.top - .05 - Math.sin(i / N * Math.PI) * .12, s.z0 + (i + .5) * d / N); p.rotation.y = (rnd() - .5) * .06; deck.add(p);
+      }
+      for (let i = 0; i <= Math.floor(d / 3); i++) for (const ox of [-1, 1]) {
+        const z = s.z0 + .2 + i * (d - .4) / Math.floor(d / 3);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(.09, .11, 4.6, 7), trunk2); post.position.set(cx + ox * (w / 2 + .05), s.top - 1.5, z); deck.add(post);
+      }
+      for (const ox of [-1, 1]) for (const hy of [.55, 1]) {
+        const rope = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, d, 5), toon('#e3cf9a')); rope.rotation.x = Math.PI / 2;
+        rope.position.set(cx + ox * (w / 2 + .05), s.top + hy - .1, (s.z0 + s.z1) / 2); deck.add(rope);
+      }
+      shade(deck); scene.add(deck);
+    } else if (s.tag === 'coffre') {
+      const grp = new THREE.Group(), g = terrainH(cx, cz);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, .5, d), toon('#8a5228')); body.position.set(cx, g + .25, cz); outline(body, .04); grp.add(body);
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(d / 2, d / 2, w, 12, 1, false, 0, Math.PI), toon('#9a5f30')); lid.rotation.set(0, 0, Math.PI / 2); lid.position.set(cx, g + .5, cz); grp.add(lid);
+      for (const ox of [-.35, .35]) { const band = new THREE.Mesh(new THREE.BoxGeometry(.08, .56, d + .04), toon('#ffcc33')); band.position.set(cx + ox * w, g + .28, cz); grp.add(band); }
+      shade(grp); scene.add(grp);
     } else if (s.tag === 'muret') {
       const g = terrainH(cx, cz) - .3, h = s.top - g;
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), toon('#ffffff', { map: stoneTex }));
@@ -342,6 +383,32 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(.16, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.5, 2.4, 1) }));
       lamp.position.set(cx + w / 2 - .15, s.top + 1.65, s.z0 + .3); deck.add(lamp);
       shade(deck); scene.add(deck);
+    }
+  }
+
+  // ---------- colonnes du temple et phare ----------
+  const stoneM = toon('#d8ccb8'), stoneD = toon('#bfb19b');
+  for (const s of SOLIDS) {
+    if (s.k !== 'c') continue;
+    if (s.tag === 'colonne') {
+      const g = terrainH(s.x, s.z), h = s.top - g, grp = new THREE.Group(); grp.position.set(s.x, g, s.z);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(s.r * .82, s.r * .9, h - .25, 12), stoneM); shaft.position.y = (h - .25) / 2; outline(shaft, .04); grp.add(shaft);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(s.r * 2.2, .25, s.r * 2.2), stoneD); base.position.y = .12; grp.add(base);
+      if (h > 2) { const cap = new THREE.Mesh(new THREE.BoxGeometry(s.r * 2.3, .28, s.r * 2.3), stoneD); cap.position.y = h - .14; outline(cap, .04); grp.add(cap); }
+      else { const top = new THREE.Mesh(new THREE.DodecahedronGeometry(s.r * .9), stoneM); top.scale.y = .4; top.position.y = h - .25; grp.add(top); }
+      shade(grp); scene.add(grp);
+    } else if (s.tag === 'phare') {
+      const g = terrainH(s.x, s.z), H = LIGHTHOUSE.h, grp = new THREE.Group(); grp.position.set(s.x, g, s.z);
+      const stripes = canvasTex(64, 256, x => { for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#e8443a' : '#fbf6ea'; x.fillRect(0, i * 32, 64, 32); } });
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(s.r * .7, s.r, H, 20), toon('#ffffff', { map: stripes })); tower.position.y = H / 2; outline(tower, .02); grp.add(tower);
+      const balcony = new THREE.Mesh(new THREE.CylinderGeometry(s.r * 1.05, s.r * 1.05, .2, 20), toon('#2d3047')); balcony.position.y = H + .1; grp.add(balcony);
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(s.r * .5, s.r * .5, 1.2, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.4, 1.6) })); lamp.position.y = H + .8; grp.add(lamp);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(s.r * .75, 1.1, 16), toon('#e8443a')); roof.position.y = H + 1.95; outline(roof, .04); grp.add(roof);
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(2.2, 26, 16, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.25, .7), transparent: true, opacity: .16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      beam.geometry.translate(0, -13, 0); beam.geometry.rotateZ(Math.PI / 2);
+      const pivot = new THREE.Group(); pivot.position.y = H + .8; pivot.add(beam); pivot.userData.dyn = true; grp.add(pivot);
+      anim.push(t => { pivot.rotation.y = t * .6; });
+      shade(grp); beam.castShadow = false; scene.add(grp);
     }
   }
 
@@ -385,7 +452,7 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
   // ---------- buissons, coquillages, étoiles de mer ----------
   const bushM = toon('#5fbf3e', { flatShading: true }), bush2 = toon('#4aa534', { flatShading: true });
   for (let i = 0; i < 16; i++) {
-    const a = rnd() * 6.28, r = 2 + rnd() * 8, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const a = rnd() * 6.28, r = 2 + rnd() * 22, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (SOLIDS.some(s => s.k === 'c' ? Math.hypot(s.x - x, s.z - z) < s.r + 1 : x > s.x0 - 1 && x < s.x1 + 1 && z > s.z0 - 1 && z < s.z1 + 1)) continue;
     if (Math.hypot(x - HILL.x, z - HILL.z) < 5) continue;
     const grp = new THREE.Group(); grp.position.set(x, terrainH(x, z), z);
@@ -439,5 +506,12 @@ export function buildWorld(scene: THREE.Scene, quality: string): World {
   for (const c of crowns) merge(c, c);
   merge(scene, scene);
 
-  return { sun, update: (t, dt) => { for (const f of anim) f(t, dt); } };
+  // les ombres suivent le joueur (zone nette de 60 m autour de lui), calées sur la grille des texels pour ne pas scintiller
+  const texel = 60 / sm;
+  const follow = (x: number, z: number) => {
+    const cx = Math.round(x / texel) * texel, cz = Math.round(z / texel) * texel;
+    sun.target.position.set(cx, 0, cz); sun.position.set(cx + SUN.x * 60, SUN.y * 60, cz + SUN.z * 60);
+  };
+  follow(0, 0);
+  return { sun, follow, update: (t, dt) => { for (const f of anim) f(t, dt); } };
 }

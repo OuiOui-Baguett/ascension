@@ -196,6 +196,125 @@ export class FX {
     this.glow.add(x, y, z, (Math.random() - .5) * 2, Math.random() * 2, (Math.random() - .5) * 2, color.clone().multiplyScalar(2), .1, .3, 0, 3);
   }
 
+  /** Boule de feu : petit cœur brûlant, flammes qui s'échappent. */
+  fireball() {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.SphereGeometry(.16, 12, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 3.6, 1.2) }));
+    const halo = this.sprite(tex, new THREE.Color(3, 1.1, .2)); halo.scale.setScalar(1.1);
+    g.add(core, halo); this.scene.add(g);
+    let t = 0;
+    return {
+      obj: g,
+      update: (x: number, y: number, z: number, dt: number) => {
+        t += dt; g.position.set(x, y, z); halo.scale.setScalar(1 + Math.sin(t * 50) * .12);
+        for (let i = 0; i < 3; i++) this.glow.add(x + (Math.random() - .5) * .2, y + (Math.random() - .5) * .2, z + (Math.random() - .5) * .2,
+          (Math.random() - .5) * .8, .6 + Math.random(), (Math.random() - .5) * .8, new THREE.Color(2.5 + Math.random(), .7 + Math.random() * .8, .1), .2 + Math.random() * .16, .3, -2, 2, -.5);
+      },
+      dispose: () => { this.scene.remove(g); },
+    };
+  }
+  /** Petite explosion de feu. */
+  fireBoom(x: number, y: number, z: number) {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * 6.28, b = Math.random() * 2 - .5, sp = 3 + Math.random() * 4;
+      this.glow.add(x, y, z, Math.cos(a) * sp, b * sp * .6 + 1, Math.sin(a) * sp, new THREE.Color(3, 1 + Math.random(), .15), .2 + Math.random() * .15, .35 + Math.random() * .2, 6, 3);
+    }
+    const fl = this.sprite(tex, new THREE.Color(4, 1.8, .4)); fl.position.set(x, y, z);
+    this.keep(fl, .18, (u, o) => { o.scale.setScalar(.4 + u * 1.8); (o as THREE.Sprite).material.opacity = 1 - u; });
+  }
+  /** Cercle d'alerte au sol (geyser, météore) : on a le temps de s'écarter. */
+  warn(x: number, y: number, z: number, r: number, ms: number, color: THREE.Color) {
+    const grp = new THREE.Group(); grp.position.set(x, y + .06, z);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r * .92, r, 48), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(2.5), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.5), transparent: true, opacity: .2, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = fill.rotation.x = -Math.PI / 2; grp.add(ring, fill); ring.renderOrder = fill.renderOrder = 3;
+    this.keep(grp, ms / 1000, u => { fill.scale.setScalar(Math.max(.01, u)); (ring.material as THREE.MeshBasicMaterial).opacity = .55 + Math.sin(u * 40) * .35; });
+  }
+  /** Geyser de lave. */
+  geyser(x: number, y: number, z: number, r: number) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(r * .45, r * .7, 1, 16, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, .6, .08), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    col.position.set(x, y, z);
+    this.keep(col, .9, (u, o) => { const h = u < .25 ? u / .25 * 7 : 7; o.scale.set(1 - u * .6, h, 1 - u * .6); o.position.y = y + h / 2; ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 1 - u; });
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * 6.28, rr = Math.random() * r * .6;
+      this.glow.add(x + Math.cos(a) * rr, y + .2, z + Math.sin(a) * rr, Math.cos(a) * (1 + Math.random() * 2), 8 + Math.random() * 9, Math.sin(a) * (1 + Math.random() * 2),
+        new THREE.Color(2.6 + Math.random(), .35 + Math.random() * .7, .04), .25 + Math.random() * .25, .8 + Math.random() * .5, 14, .6);
+    }
+    for (let i = 0; i < 14; i++) this.soft.add(x + (Math.random() - .5) * r, y + .2, z + (Math.random() - .5) * r, (Math.random() - .5) * 3, 6 + Math.random() * 6, (Math.random() - .5) * 3, new THREE.Color(.22, .16, .14), .3 + Math.random() * .2, 1.1, 14, .4);
+    this.flash(x, y + 1, z, '#ff7a1a', 26);
+  }
+  /** Météore : tombe du ciel pendant l'alerte et arrive pile à l'impact. */
+  meteorFall(x: number, y: number, z: number, ms: number) {
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(.25, .12, .08) }));
+    const glow = this.sprite(tex, new THREE.Color(5, 2, .4)); glow.scale.setScalar(5); rock.add(glow);
+    const sx = x + 22, sy = y + 46, sz = z + 12;
+    this.keep(rock, ms / 1000, (u, o) => {
+      const k = u * u;
+      o.position.set(sx + (x - sx) * k, sy + (y - sy) * k, sz + (z - sz) * k); o.rotation.x += .2; o.rotation.y += .13;
+      for (let i = 0; i < 4; i++) this.glow.add(o.position.x + (Math.random() - .5), o.position.y + (Math.random() - .5), o.position.z + (Math.random() - .5), 0, 0, 0, new THREE.Color(3.5, 1.2 + Math.random(), .2), .9 + Math.random() * .6, .5, 0, 1, -.4);
+      if (Math.random() < .5) this.soft.add(o.position.x, o.position.y, o.position.z, 0, 0, 0, new THREE.Color(.3, .27, .27), 1.2, 1.2, -.5, 1, 1.5);
+    });
+  }
+  meteor(x: number, y: number, z: number, r: number) {
+    this.boom(x, y + .5, z, new THREE.Color(1, .45, .1));
+    for (let i = 0; i < 60; i++) {
+      const a = Math.random() * 6.28, sp = 6 + Math.random() * 12;
+      this.glow.add(x, y + .4, z, Math.cos(a) * sp, 4 + Math.random() * 10, Math.sin(a) * sp, new THREE.Color(3.5, 1 + Math.random() * 1.2, .15), .3 + Math.random() * .3, .7 + Math.random() * .6, 16, 1.5);
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(.85, 1, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 1.6, .3), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(x, y + .15, z);
+    this.keep(ring, .6, (u, o) => { o.scale.setScalar(.5 + u * r * 1.4); ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 1 - u; });
+    this.scorch(x, y, z, r * .8);
+  }
+  /** Trace de brûlure au sol. */
+  scorch(x: number, y: number, z: number, r: number) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshBasicMaterial({ color: '#1d1410', transparent: true, opacity: .6, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y + .04, z); m.renderOrder = 2;
+    this.keep(m, 5, u => { (m.material as THREE.MeshBasicMaterial).opacity = .6 * (1 - u * u); });
+  }
+  /** Mur de roche du Colosse : sort de terre, puis s'effrite. */
+  private walls = new Map<string, THREE.Object3D>();
+  wall(id: string, x: number, y: number, z: number, yaw: number, w: number, h: number) {
+    const grp = new THREE.Group(); grp.position.set(x, y, z); grp.rotation.y = yaw;
+    const mat = new THREE.MeshToonMaterial({ color: '#9b8670' });
+    for (let i = 0; i < 4; i++) {
+      const b = new THREE.Mesh(new THREE.DodecahedronGeometry(.75, 0), mat);
+      b.scale.set(1, h / 1.5 * (.85 + Math.random() * .3), .9); b.position.set((i - 1.5) / 3 * (w - .9), h * .42, 0); b.rotation.y = Math.random() * 3;
+      b.castShadow = true; grp.add(b);
+    }
+    this.scene.add(grp); this.walls.set(id, grp);
+    this.keep(new THREE.Object3D(), .25, u => { grp.position.y = y - h + u * h; });
+    grp.position.y = y - h;
+    for (let i = 0; i < 26; i++) this.soft.add(x + (Math.random() - .5) * w, y + .2, z + (Math.random() - .5) * 1.5, (Math.random() - .5) * 3, 1 + Math.random() * 3, (Math.random() - .5) * 3, new THREE.Color(.75, .66, .55), .5 + Math.random() * .4, .8, 3, 1.5, 1.5);
+  }
+  wallEnd(id: string) {
+    const grp = this.walls.get(id); if (!grp) return;
+    this.walls.delete(id);
+    const p = grp.position.clone();
+    this.live.push({ o: grp, t: 0, life: .5, step: (u, o) => { o.position.y = p.y - u * 2.5; } });
+    for (let i = 0; i < 20; i++) this.soft.add(p.x + (Math.random() - .5) * 3, p.y + Math.random() * 2, p.z + (Math.random() - .5) * 3, (Math.random() - .5) * 2, 1, (Math.random() - .5) * 2, new THREE.Color(.7, .62, .52), .5, .7, 2, 1.5, 1);
+  }
+  clearWalls() { for (const id of [...this.walls.keys()]) { this.scene.remove(this.walls.get(id)!); this.walls.delete(id); } }
+  /** Séisme : onde au sol, fissures, poussière. */
+  quake(x: number, y: number, z: number, r: number) {
+    for (let k = 0; k < 2; k++) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(.88, 1, 64), new THREE.MeshBasicMaterial({ color: k ? new THREE.Color(2.4, 1.8, .9) : new THREE.Color(.9, .75, .5), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(x, y + .1 + k * .02, z);
+      this.keep(ring, .55 + k * .15, (u, o) => { o.scale.setScalar(.5 + Math.pow(u, .6) * r); ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 1 - u; });
+    }
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * 6.28, rr = Math.random() * r;
+      this.soft.add(x + Math.cos(a) * rr, y + .15, z + Math.sin(a) * rr, Math.cos(a) * 2, 2 + Math.random() * 4, Math.sin(a) * 2, new THREE.Color(.8, .7, .55), .45 + Math.random() * .5, .9 + Math.random() * .4, 6, 1.2, 1.2);
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * 6.28 + Math.random() * .3, l = r * (.5 + Math.random() * .5);
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(.18, l), new THREE.MeshBasicMaterial({ color: '#2a1d14', transparent: true, opacity: .7, depthWrite: false }));
+      c.rotation.set(-Math.PI / 2, 0, -a + Math.PI / 2); c.position.set(x + Math.cos(a) * l / 2, y + .05, z + Math.sin(a) * l / 2); c.renderOrder = 2;
+      this.keep(c, 3, u => { (c.material as THREE.MeshBasicMaterial).opacity = .7 * (1 - u); });
+    }
+    this.flash(x, y + 1, z, '#ffcc66', 18);
+  }
+
   update(dt: number) {
     this.glow.update(dt); this.soft.update(dt);
     for (const l of this.lights) l.intensity *= Math.exp(-dt * 9);

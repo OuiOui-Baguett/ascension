@@ -21,7 +21,7 @@ export const newBody = (x: number, y: number, z: number): Body =>
   ({ x, y, z, vx: 0, vy: 0, vz: 0, ground: false, airJumps: 1, dashT: 0, dashCd: 0, stun: 0 });
 
 /** Avance un corps de dt secondes. Renvoie true s'il vient de tomber dans l'eau profonde. */
-export function stepBody(b: Body, inp: MoveInput, dt: number): boolean {
+export function stepBody(b: Body, inp: MoveInput, dt: number, speedMul = 1): boolean {
   const n = Math.max(1, Math.ceil(dt / (1 / 90))), h = dt / n;
   let jump = inp.jump, dash = inp.dash;
   for (let i = 0; i < n; i++) {
@@ -37,7 +37,7 @@ export function stepBody(b: Body, inp: MoveInput, dt: number): boolean {
     if (b.dashT > 0) b.dashT -= h;
     else if (b.stun > 0) { const k = Math.exp(-h * .9); b.vx *= k; b.vz *= k; }          // on vole : presque pas de freinage
     else {
-      const a = (b.ground ? MOVE.accel : MOVE.airAccel) * h, tx = mx * MOVE.speed, tz = mz * MOVE.speed;
+      const a = (b.ground ? MOVE.accel : MOVE.airAccel) * h, tx = mx * MOVE.speed * speedMul, tz = mz * MOVE.speed * speedMul;
       const dx = tx - b.vx, dz = tz - b.vz, dl = Math.hypot(dx, dz);
       if (dl <= a) { b.vx = tx; b.vz = tz; } else { b.vx += dx / dl * a; b.vz += dz / dl * a; }
     }
@@ -62,11 +62,9 @@ export function stepBody(b: Body, inp: MoveInput, dt: number): boolean {
 }
 
 // ---------- les coups ----------
-export const PUNCH = { range: 2.4, cos: .5, cd: .34, dmg: 7, dmg3: 11, kb: 5, kb3: 8, scale: .11, comboWindow: .7 };
-export const BLAST = { speed: 26, radius: .55, life: 1.6, cd: 3.2, dmg: 12, kb: 7.5, scale: .13, splash: 2.4 };
 export const RESPAWN_MS = 2600, SHIELD_MS = 2000;
 
 /** Vitesse d'éjection : plus la jauge est haute, plus on vole loin. */
-export function knock(base: number, scale: number, pct: number) { return base + pct * scale; }
+export function knock(base: number, scale: number, pct: number) { return base + pct * scale * 1.8; }
 /** Durée du vol incontrôlé après un coup. */
 export const stunFor = (kb: number) => Math.min(1.1, .12 + kb * .035);

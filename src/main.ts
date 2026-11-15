@@ -11,8 +11,9 @@ import { Fighter, Viewmodel, colorOf, COLORS, pctColor } from './avatars';
 import { Input } from './input';
 import { Net, LOCAL } from './net';
 import { audioUnlock, sfx, setMuted, isMuted } from './audio';
-import { MOVE, PUNCH, BLAST, RESPAWN_MS, newBody, stepBody } from '../shared/fight';
-import { terrainH, segBlocked } from '../shared/island';
+import { MOVE, RESPAWN_MS, newBody, stepBody } from '../shared/fight';
+import { CLASSES, CLASS_IDS, FIREBALL, WALL, type ClassId } from '../shared/classes';
+import { terrainH, segBlocked, DYN } from '../shared/island';
 import type { PlayerInfo, ServerMsg, Mode } from '../shared/protocol';
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
@@ -28,7 +29,7 @@ const engine = new Engine(canvas, scene, camera);
 const world = buildWorld(scene, engine.quality);
 const fx = new FX(scene);
 const input = new Input(canvas, $('#joy'), $('#joy i'));
-for (const [id, a] of [['#b-punch', 'punch'], ['#b-blast', 'blast'], ['#b-jump', 'jump'], ['#b-dash', 'dash']]) input.bindButton($(id), a);
+for (const [id, a] of [['#b-punch', 'punch'], ['#b-blast', 'blast'], ['#b-jump', 'jump'], ['#b-dash', 'dash'], ['#b-ult', 'ult']]) input.bindButton($(id), a);
 const net = new Net();
 engine.onShadows = () => { world.sun.castShadow = false; scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; }); };
 // sensibilité de la caméra (réglable sur l'écran d'accueil)
@@ -36,6 +37,20 @@ const SENS = [['lente', .75], ['normale', 1], ['rapide', 1.35], ['très rapide',
 let sensI = 1; try { sensI = Math.max(0, Math.min(3, +(localStorage.getItem('nfg.sens') ?? 1))); } catch { /* */ }
 let pendX = 0, pendY = 0;          // rotation de caméra en attente, lissée sur quelques images
 const TEAMC = ['#3a86ff', '#ff5a5f', '#7bd63a', '#ffd23f'];
+// la classe choisie (gardée d'une partie à l'autre)
+let myCls: ClassId = 'brasier'; try { const c = localStorage.getItem('nfg.cls') as ClassId; if (CLASSES[c]) myCls = c; } catch { /* */ }
+function pickClass(c: ClassId) {
+  myCls = c; try { localStorage.setItem('nfg.cls', c); } catch { /* */ }
+  net.send({ t: 'class', c }); renderClasses();
+}
+function renderClasses() {
+  document.querySelectorAll<HTMLElement>('.classes').forEach(box => {
+    box.innerHTML = CLASS_IDS.map(id => { const C = CLASSES[id]; return `<button data-cls="${id}" class="${id === myCls ? 'on' : ''}" style="--k:${C.color}"><b>${C.name}</b><small>${C.role}</small><em>${C.pow.name} · ${C.ult.name}</em></button>`; }).join('');
+    box.querySelectorAll<HTMLElement>('[data-cls]').forEach(b => b.onclick = () => pickClass(b.dataset.cls as ClassId));
+  });
+  const C = CLASSES[myCls];
+  document.querySelectorAll<HTMLElement>('.cls-desc').forEach(d => { d.innerHTML = `<b>${C.name}</b> — ${C.desc} <i>Pouvoir : ${C.pow.desc} Ultime : ${C.ult.desc}</i>`; });
+}
 interface Pop { el: HTMLElement; x: number; y: number; z: number; t: number }
 const pops: Pop[] = [];
 let hitDirT = 0;
@@ -48,7 +63,7 @@ let training = 0;          // bots à ajouter automatiquement (bouton « S'entra
 interface Other { info: PlayerInfo; f: Fighter | null; buf: { t: number; x: number; y: number; z: number; yaw: number; st: number }[]; pct: number; lives: number; last: THREE.Vector3; st: number }
 const others = new Map<string, Other>();
 const me = {
-  body: newBody(0, 1, 0), yaw: 0, pitch: 0, alive: false, out: false, shield: 0, cdPunch: 0, cdBlast: 0, seq: 0, color: 0,
+  body: newBody(0, 1, 0), yaw: 0, pitch: 0, alive: false, out: false, shield: 0, cdAtk: 0, cdPow: 0, seq: 0, color: 0, cls: 'brasier' as ClassId, ult: 0,
   startAt: 0, sendT: 0, deadT: 0, deadX: 0, deadZ: 0, pct: 0, lives: 3, count: -1, team: -1,
 };
 let vm: Viewmodel | null = null;
@@ -95,6 +110,7 @@ $('#addbot').onclick = () => net.send({ t: 'bot', add: true });
 $('#rmbot').onclick = () => net.send({ t: 'bot', add: false });
 $('#leave').onclick = () => { net.send({ t: 'leave' }); lobby = null; show('title'); screen = 'title'; };
 $('#start').onclick = () => { audioUnlock(); net.send({ t: 'start' }); };
+renderClasses();
 document.querySelectorAll<HTMLElement>('[data-l]').forEach(b => b.onclick = () => { if (lobby) net.send({ t: 'settings', lives: lobby.settings.lives + +b.dataset.l! }); });
 $('#again').onclick = () => { audioUnlock(); net.send({ t: 'start' }); };
 $('#toLobby').onclick = () => { endMatch(); show('lobby'); };
@@ -121,20 +137,25 @@ function setupMatch(m: Extract<ServerMsg, { t: 'start' }>) {
   endMatch();
   screen = 'play'; show('play'); $('#end').classList.add('hidden');
   for (const p of m.players) {
-    const o: Other = { info: p, f: p.id === net.id ? null : new Fighter(scene, p.name, p.color), buf: [], pct: 0, lives: m.lives, last: new THREE.Vector3(), st: 0 };
+    const o: Other = { info: p, f: p.id === net.id ? null : new Fighter(scene, p.name, p.color, p.cls), buf: [], pct: 0, lives: m.lives, last: new THREE.Vector3(), st: 0 };
     others.set(p.id, o);
   }
   const mine = m.players.find(p => p.id === net.id);
   me.color = mine?.color ?? 0; me.team = mine?.team ?? -1;
   for (const o of others.values()) o.f?.setAlly(o.info.team === me.team);
-  vm = new Viewmodel(camera, me.color);
+  me.cls = mine?.cls ?? myCls;
+  vm = new Viewmodel(camera, me.color, me.cls);
+  const C = CLASSES[me.cls];
+  ($('#b-punch span') as HTMLElement).textContent = C.atk.name; ($('#b-blast span') as HTMLElement).textContent = C.pow.name; ($('#b-ult span') as HTMLElement).textContent = C.ult.name;
+  $('#hud').dataset.cls = me.cls;
   me.body = newBody(m.spawn.x, m.spawn.y, m.spawn.z); me.yaw = m.spawn.yaw; me.pitch = -.05;
-  me.alive = true; me.out = false; me.shield = 0; me.cdPunch = me.cdBlast = 0; me.pct = 0; me.lives = m.lives;
+  me.alive = true; me.out = false; me.shield = 0; me.cdAtk = 0; me.cdPow = performance.now() + 2000; me.pct = 0; me.lives = m.lives; me.ult = 0;
   me.startAt = performance.now() + m.at; me.count = -1;
   input.clear(); input.enabled = true;
   renderCards();
 }
 function endMatch() {
+  fx.clearWalls(); for (const id of [...wallParts.keys()]) removeWall(id);
   for (const p of pops) p.el.remove(); pops.length = 0;
   for (const o of others.values()) o.f?.dispose();
   others.clear();
@@ -164,10 +185,21 @@ function feed(html: string) {
 const nearMe = (x: number, z: number) => Math.max(.15, 1 - Math.hypot(x - me.body.x, z - me.body.z) / 30);
 const fwd = (yaw: number, pitch: number) => new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
-function addProj(key: string, x: number, y: number, z: number, dx: number, dy: number, dz: number, color: THREE.Color) {
+function addProj(key: string, x: number, y: number, z: number, dx: number, dy: number, dz: number) {
   projs.get(key)?.orb.dispose();
-  projs.set(key, { orb: fx.orb(color), x, y, z, dx, dy, dz, until: performance.now() + BLAST.life * 1000 + 300, color });
+  projs.set(key, { orb: fx.fireball(), x, y, z, dx, dy, dz, until: performance.now() + FIREBALL.life * 1000 + 250, color: new THREE.Color('#ff7a1a') });
 }
+/** Les murs de roche existent aussi dans la page, pour qu'on s'y cogne vraiment. */
+const wallParts = new Map<string, typeof DYN>();
+function addWall(id: string, cx: number, cz: number, yaw: number) {
+  const fx2 = Math.sin(yaw), fz = Math.cos(yaw), g = terrainH(cx, cz), parts: typeof DYN = [];
+  for (let i = 0; i < 4; i++) {
+    const o = (i - 1.5) / 3 * (WALL.width - .9), px = cx - fz * o, pz = cz + fx2 * o;
+    parts.push({ k: 'c', x: px, z: pz, r: .58, base: terrainH(px, pz) - 1, top: Math.max(g, terrainH(px, pz)) + WALL.height, tag: 'mur' });
+  }
+  DYN.push(...parts); wallParts.set(id, parts);
+}
+function removeWall(id: string) { for (const s of wallParts.get(id) ?? []) { const i = DYN.indexOf(s); if (i >= 0) DYN.splice(i, 1); } wallParts.delete(id); }
 
 // ---------- réseau ----------
 net.onMsg = m => {
@@ -192,8 +224,10 @@ net.onMsg = m => {
       }
       break;
     }
+    case 'welcome': net.send({ t: 'class', c: myCls }); break;
     case 'stats': {
-      for (const [id, pct, lives] of m.s) {
+      for (const [id, pct, lives, ult] of m.s) {
+        if (id === net.id) me.ult = ult;
         const o = others.get(id); if (!o) continue;
         o.pct = pct; o.lives = lives; o.f?.setLabel(pct);
         if (id === net.id) { if (pct > me.pct) { $('#mypct').classList.remove('bump'); void $('#mypct').offsetWidth; $('#mypct').classList.add('bump'); } me.pct = pct; me.lives = lives; }
@@ -204,28 +238,36 @@ net.onMsg = m => {
       if (m.id === net.id) break;
       const o = others.get(m.id); o?.f?.attack(m.k);
       const p = o?.buf[o.buf.length - 1];
-      if (p && m.k === 'punch') { const n = nearMe(p.x, p.z); if (n > .5) sfx.swing(); }
+      if (p && m.k === 'atk' && o?.info.cls === 'colosse') { const n = nearMe(p.x, p.z); if (n > .5) sfx.swing(); }
       break;
     }
     case 'proj': {
       const mineKey = `m${m.s}`;
       if (m.owner === net.id && projs.has(mineKey)) { pidKey.set(m.pid, mineKey); break; }
       const k = `p${m.pid}`; pidKey.set(m.pid, k);
-      addProj(k, m.x, m.y, m.z, m.dx, m.dy, m.dz, colorOf(others.get(m.owner)?.info.color ?? 0));
-      sfx.cast();
+      addProj(k, m.x, m.y, m.z, m.dx, m.dy, m.dz);
+      if (nearMe(m.x, m.z) > .6) sfx.fire();
       break;
     }
     case 'boom': {
       const k = pidKey.get(m.pid) ?? `p${m.pid}`, p = projs.get(k);
-      const color = p?.color ?? new THREE.Color('#7fe8ff');
       p?.orb.dispose(); projs.delete(k); pidKey.delete(m.pid);
-      fx.boom(m.x, m.y, m.z, color.clone().lerp(new THREE.Color('#ffffff'), .25));
-      const n = nearMe(m.x, m.z); sfx.boom(n);
-      if (n > .85) shake = Math.max(shake, .35);
+      fx.fireBoom(m.x, m.y, m.z); sfx.pop(nearMe(m.x, m.z));
+      break;
+    }
+    case 'fx': {
+      const n = nearMe(m.x, m.z), d = Math.hypot(m.x - me.body.x, m.z - me.body.z);
+      if (m.k === 'warn') { fx.warn(m.x, m.y, m.z, m.r, m.ms, m.kind === 'meteor' ? new THREE.Color('#ff3b1a') : new THREE.Color('#ff8a1a')); if (m.kind === 'meteor') { fx.meteorFall(m.x, m.y, m.z, m.ms); sfx.incoming(); } }
+      else if (m.k === 'geyser') { fx.geyser(m.x, m.y, m.z, m.r); sfx.geyser(n); }
+      else if (m.k === 'meteor') { fx.meteor(m.x, m.y, m.z, m.r); sfx.boom(n); if (d < 16) shake = Math.max(shake, 1.1 - d / 20); }
+      else if (m.k === 'wall') { fx.wall(m.id, m.x, m.y, m.z, m.r, WALL.width, WALL.height); addWall(m.id, m.x, m.z, m.r); sfx.rumble(n); }
+      else if (m.k === 'wallEnd') { fx.wallEnd(m.id); removeWall(m.id); }
+      else if (m.k === 'quake') { fx.quake(m.x, m.y, m.z, m.r); sfx.boom(n); if (d < m.r * 1.6) shake = Math.max(shake, 1); }
       break;
     }
     case 'hit': {
-      if (m.k === 'punch') { fx.punch(m.x, m.y, m.z, m.big); sfx.punch(m.big, nearMe(m.x, m.z)); }
+      if (m.k === 'lift') { if (m.id === net.id) { me.body.vy = Math.max(me.body.vy, m.iy); me.body.ground = false; } break; }
+      if (m.k === 'punch' || m.k === 'punch3') { fx.punch(m.x, m.y, m.z, m.big || m.k === 'punch3'); sfx.punch(m.big || m.k === 'punch3', nearMe(m.x, m.z)); }
       const o = others.get(m.id); if (o) { o.pct = m.pct; o.f?.setLabel(m.pct); }
       if (m.by === net.id && m.id !== net.id) {
         const c = $('#cross'); c.classList.remove('hit', 'kill'); void c.offsetWidth; c.classList.add('hit');
@@ -259,6 +301,7 @@ net.onMsg = m => {
     }
     case 'spawn': {
       fx.beam(m.x, terrainH(m.x, m.z), m.z);
+      if (m.id === net.id) world.follow(m.x, m.z);
       if (m.id === net.id) {
         me.body = newBody(m.x, m.y, m.z); me.yaw = m.yaw; me.pitch = -.3; me.alive = true; me.shield = performance.now() + 2000;
       } else { const o = others.get(m.id); if (o) o.buf = []; }
@@ -305,6 +348,7 @@ function play(dt: number, now: number) {
   const sens = (input.touch ? .0036 : .0022) * SENS[sensI][1];
   pendX += input.lookX * sens; pendY += input.lookY * sens; input.lookX = input.lookY = 0;
   const k = input.touch ? 1 - Math.exp(-dt * 26) : 1;
+  if (input.touch && me.alive && onTarget()) { pendX *= .6; pendY *= .6; }    // le viseur « accroche » un peu sur un adversaire
   me.yaw -= pendX * k; me.pitch = Math.max(-1.45, Math.min(1.45, me.pitch - pendY * k));
   pendX *= 1 - k; pendY *= 1 - k;
   const started = now >= me.startAt;
@@ -323,23 +367,32 @@ function play(dt: number, now: number) {
     const f = { x: -Math.sin(me.yaw), z: -Math.cos(me.yaw) }, r = { x: Math.cos(me.yaw), z: -Math.sin(me.yaw) };
     const jump = input.take('jump') && started, dash = input.take('dash') && started;
     const wasGround = b.ground, dcd = b.dashCd;
-    const fell = stepBody(b, { mx: f.x * mv.y + r.x * mv.x, mz: f.z * mv.y + r.z * mv.x, jump, dash }, dt);
+    const C = CLASSES[me.cls];
+    const fell = stepBody(b, { mx: f.x * mv.y + r.x * mv.x, mz: f.z * mv.y + r.z * mv.x, jump, dash }, dt, C.speed);
     if (jump && (b.vy > 6 && (wasGround || b.airJumps === 0))) sfx.jump();
     if (dash && b.dashCd > dcd) { sfx.dash(); fov = 92; }
     if (fell) { net.send({ t: 'fell' }); me.alive = false; me.deadT = now; me.deadX = b.x; me.deadZ = b.z; }
     // les coups
     const ex = b.x, ey = b.y + MOVE.eye, ez = b.z;
-    if ((input.take('punch') || input.held.has('punch')) && started && now >= me.cdPunch) {
-      me.cdPunch = now + PUNCH.cd * 1000; vm?.punch(); sfx.swing();
-      net.send({ t: 'atk', k: 'punch', x: b.x, y: b.y, z: b.z, yaw: me.yaw, pitch: me.pitch, s: ++me.seq });
-    }
-    if (input.take('blast') && started && now >= me.cdBlast) {
-      me.cdBlast = now + BLAST.cd * 1000; vm?.blast(); sfx.cast();
+    const fire = me.cls === 'brasier';
+    if ((input.take('punch') || input.held.has('punch')) && started && now >= me.cdAtk) {
+      me.cdAtk = now + C.atk.cd * 1000; vm?.punch();
       let ay = me.yaw, ap = me.pitch;
-      if (TOUCH) { const a = assist(ex, ey, ez); if (a) { ay = a.yaw; ap = a.pitch; } }
-      const d = fwd(ay, ap), s = ++me.seq;
-      addProj(`m${s}`, ex + d.x * .7, ey - .15 + d.y * .7, ez + d.z * .7, d.x, d.y, d.z, colorOf(me.color));
-      net.send({ t: 'atk', k: 'blast', x: b.x, y: b.y, z: b.z, yaw: ay, pitch: ap, s });
+      if (fire) {
+        if (TOUCH) { const a = assist(ex, ey, ez, 1, FIREBALL.speed); if (a) { ay = a.yaw; ap = a.pitch; } }
+        const d = fwd(ay, ap); addProj(`m${me.seq + 1}`, ex + d.x * .6, ey - .12 + d.y * .6, ez + d.z * .6, d.x, d.y, d.z); sfx.fire();
+      } else sfx.swing();
+      net.send({ t: 'atk', k: 'atk', x: b.x, y: b.y, z: b.z, yaw: ay, pitch: ap, s: ++me.seq });
+    }
+    // Pouvoir et Ultime : la visée assistée vise les pieds (le geyser et le météore tombent au sol)
+    for (const k of ['pow', 'ult'] as const) {
+      if (!input.take(k === 'pow' ? 'blast' : 'ult') || !started) continue;
+      if (k === 'pow' ? now < me.cdPow : me.ult < 100) { if (k === 'ult') toast('Ultime pas encore prêt : touche des adversaires pour le charger.'); continue; }
+      if (k === 'pow') me.cdPow = now + C.pow.cd * 1000; else me.ult = 0;
+      vm?.blast(); sfx.cast();
+      let ay = me.yaw, ap = me.pitch;
+      if (fire && TOUCH) { const a = assist(ex, ey, ez, .1, 0); if (a) { ay = a.yaw; ap = a.pitch; } }
+      net.send({ t: 'atk', k, x: b.x, y: b.y, z: b.z, yaw: ay, pitch: ap, s: ++me.seq });
     }
     if (now - me.sendT > 33) {
       me.sendT = now;
@@ -399,32 +452,44 @@ function play(dt: number, now: number) {
   // projectiles (vol simulé dans la page en attendant l'explosion décidée par le serveur)
   for (const [k, p] of projs) {
     if (now > p.until) { p.orb.dispose(); projs.delete(k); continue; }
-    const st = BLAST.speed * dt;
+    const st = FIREBALL.speed * dt;
     p.x += p.dx * st; p.y += p.dy * st; p.z += p.dz * st;
     if (p.y < Math.max(0, terrainH(p.x, p.z))) { p.x -= p.dx * st; p.y -= p.dy * st; p.z -= p.dz * st; p.dx = p.dy = p.dz = 0; }
     p.orb.update(p.x, p.y, p.z, dt);
   }
 
   // boutons : temps de recharge
-  const cdb = Math.max(0, me.cdBlast - now) / (BLAST.cd * 1000), cdd = b.dashCd / MOVE.dashCd;
+  const cdb = Math.max(0, me.cdPow - now) / (CLASSES[me.cls].pow.cd * 1000), cdd = b.dashCd / MOVE.dashCd;
+  ($('#b-ult .cd') as HTMLElement).style.setProperty('--p', `${100 - me.ult}%`); $('#b-ult').classList.toggle('ready', me.ult >= 100);
+  world.follow(camera.position.x, camera.position.z);
   ($('#b-blast .cd') as HTMLElement).style.setProperty('--p', `${cdb * 100}%`); $('#b-blast').classList.toggle('wait', cdb > 0);
   ($('#b-dash .cd') as HTMLElement).style.setProperty('--p', `${cdd * 100}%`); $('#b-dash').classList.toggle('wait', cdd > 0);
   $('#cross').classList.toggle('ready', cdb <= 0);
 }
 
 /** Visée assistée (tactile) : si un adversaire est à moins de ~9° du viseur, l'orbe part vers lui. */
-function assist(ex: number, ey: number, ez: number) {
+function assist(ex: number, ey: number, ez: number, hy = 1, speed = 0) {
   const f = fwd(me.yaw, me.pitch); let best: { yaw: number; pitch: number } | null = null, ba = .16;
   for (const o of others.values()) {
     const B = o.buf; if (!o.f || o.info.team === me.team || !B.length || B[B.length - 1].st & 16) continue;
     const p = o.f.root.position, d = Math.hypot(p.x - ex, p.y + 1 - ey, p.z - ez);
     if (d > 30 || d < 1) continue;
-    const last = B[B.length - 1], prev = B[Math.max(0, B.length - 4)], span = Math.max(.05, (last.t - prev.t) / 1000), lead = d / BLAST.speed;
-    const tx = p.x + (last.x - prev.x) / span * lead, ty = p.y + 1, tz = p.z + (last.z - prev.z) / span * lead;
+    const last = B[B.length - 1], prev = B[Math.max(0, B.length - 4)], span = Math.max(.05, (last.t - prev.t) / 1000), lead = speed ? d / speed : .45;
+    const tx = p.x + (last.x - prev.x) / span * lead, ty = p.y + hy, tz = p.z + (last.z - prev.z) / span * lead;
     const v = new THREE.Vector3(tx - ex, ty - ey, tz - ez).normalize(), a = Math.acos(Math.min(1, v.dot(f)));
     if (a < ba && !segBlocked(ex, ey, ez, p.x, p.y + 1, p.z)) { ba = a; best = { yaw: Math.atan2(-v.x, -v.z), pitch: Math.asin(v.y) }; }
   }
   return best;
+}
+/** Le viseur est-il sur un adversaire ? (pour le freinage de visée au tactile) */
+function onTarget() {
+  const f = fwd(me.yaw, me.pitch), ex = me.body.x, ey = me.body.y + MOVE.eye, ez = me.body.z;
+  for (const o of others.values()) {
+    if (!o.f || o.info.team === me.team || !o.f.root.visible) continue;
+    const p = o.f.root.position, v = new THREE.Vector3(p.x - ex, p.y + 1 - ey, p.z - ez), d = v.length();
+    if (d < 32 && v.normalize().dot(f) > Math.cos(Math.max(.035, .5 / d))) return true;
+  }
+  return false;
 }
 /** HUD qui suit le monde : chiffres de dégâts qui s'envolent, flèches vers les adversaires hors de l'écran. */
 const arrows: HTMLElement[] = [];

@@ -5,7 +5,8 @@ export const TICK_MS = 33;
 /** ffa : chacun pour soi · duo : équipes de 2 · coop : tous les humains contre les bots */
 export type Mode = 'ffa' | 'duo' | 'coop';
 export interface Settings { lives: number; mode: Mode }
-export interface PlayerInfo { id: string; name: string; color: number; bot: boolean; host: boolean; team: number }
+import type { ClassId, Ability } from './classes';
+export interface PlayerInfo { id: string; name: string; color: number; bot: boolean; host: boolean; team: number; cls: ClassId }
 /** Répartition des équipes : les humains d'abord, pour que les potes jouent ensemble. */
 export function teamsFor(players: { bot: unknown }[], mode: Mode): number[] {
   if (mode === 'ffa') return players.map((_, i) => i);
@@ -26,7 +27,8 @@ export type ClientMsg =
   /** position de son propre corps (la page fait sa physique) */
   | { t: 'in'; x: number; y: number; z: number; yaw: number; pitch: number; st: number }
   /** un coup : origine, direction de visée, numéro (pour relier le projectile prévu dans la page) */
-  | { t: 'atk'; k: 'punch' | 'blast'; x: number; y: number; z: number; yaw: number; pitch: number; s: number }
+  | { t: 'atk'; k: Ability; x: number; y: number; z: number; yaw: number; pitch: number; s: number }
+  | { t: 'class'; c: ClassId }
   | { t: 'fell' }
   | { t: 'ping'; c: number };
 
@@ -38,11 +40,13 @@ export type ServerMsg =
   | { t: 'lobby'; code: string; players: PlayerInfo[]; settings: Settings; phase: 'lobby' | 'play' }
   | { t: 'start'; players: PlayerInfo[]; lives: number; spawn: { x: number; y: number; z: number; yaw: number }; /** ms avant le top départ */ at: number }
   | { t: 'snap'; p: SnapRow[] }
-  | { t: 'stats'; s: [string, number, number][] }            // [id, jauge %, vies]
-  | { t: 'atk'; id: string; k: 'punch' | 'blast'; n: number } // pour animer les autres
+  | { t: 'stats'; s: [string, number, number, number][] }    // [id, jauge %, vies, ultime 0-100]
+  | { t: 'atk'; id: string; k: Ability; n: number }           // pour animer les autres
   | { t: 'proj'; pid: number; owner: string; s: number; x: number; y: number; z: number; dx: number; dy: number; dz: number }
   | { t: 'boom'; pid: number; x: number; y: number; z: number }
-  | { t: 'hit'; id: string; by: string; k: 'punch' | 'blast'; pct: number; ix: number; iy: number; iz: number; stun: number; x: number; y: number; z: number; big: boolean }
+  /** effets : warn (cercle d'alerte), geyser, meteor, wall, wallEnd, quake */
+  | { t: 'fx'; k: string; kind: string; x: number; y: number; z: number; r: number; ms: number; id: string }
+  | { t: 'hit'; id: string; by: string; k: string; pct: number; ix: number; iy: number; iz: number; stun: number; x: number; y: number; z: number; big: boolean }
   | { t: 'ko'; id: string; by: string | null; lives: number; x: number; z: number }
   | { t: 'spawn'; id: string; x: number; y: number; z: number; yaw: number }
   | { t: 'end'; winner: string | null; winners: string[]; ranking: string[] }

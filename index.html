@@ -18,15 +18,12 @@
     </div>
     <div class="card menu">
       <label class="field"><span>Ton pseudo</span><input id="name" maxlength="14" placeholder="Ton prénom" autocomplete="off" spellcheck="false" enterkeyhint="done"></label>
+      <div class="classes"></div>
       <button id="train" class="btn big yellow">S'entraîner contre des bots</button>
       <button id="create" class="btn big">Créer une partie entre potes</button>
       <div class="join"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="join" class="btn">Rejoindre</button></div>
       <div class="row opts"><button id="sens" class="link">Caméra : normale</button><button id="snd" class="link">Son : oui</button></div>
-      <div class="rules">
-        <p><b>Le but :</b> éjecter les autres dans l'eau.</p>
-        <p>Chaque coup reçu fait monter ta jauge <em>%</em>. Plus elle est haute, plus tu voles loin.</p>
-        <p><b>3 vies</b> chacun, le dernier sur l'île gagne.</p>
-      </div>
+      <div class="rules"><p><b>Le but :</b> éjecter les autres dans l'eau. Chaque coup reçu fait monter ta jauge <em>%</em> : plus elle est haute, plus tu voles loin. <b>3 vies</b>, le dernier sur l'île gagne.</p></div>
     </div>
   </div>
 
@@ -35,6 +32,8 @@
       <div class="col">
       <div class="codebox"><span>Code de la partie</span><b id="l-code">····</b><small>Envoie-le à tes potes</small></div>
       <ul id="l-players"></ul>
+      <div class="classes"></div>
+      <p class="cls-desc"></p>
       </div><div class="col">
       <div class="seg" id="l-mode"><button data-mode="ffa">Chacun pour soi</button><button data-mode="duo">Duos</button><button data-mode="coop">Potes contre bots</button></div>
       <div class="row set"><span>Vies</span><div class="step"><button data-l="-1" class="btn sq">−</button><b id="l-lives">3</b><button data-l="1" class="btn sq">+</button></div></div>
@@ -61,6 +60,7 @@
       <button id="b-jump" class="pad sm"><span>Saut</span></button>
       <button id="b-dash" class="pad sm"><span>Esquive</span><i class="cd"></i></button>
       <button id="b-punch" class="pad xl"><span>Frapper</span></button>
+      <button id="b-ult" class="pad sm"><span>Ultime</span><i class="cd"></i></button>
     </div>
     <button id="quit" class="btn ghost small">Quitter</button>
     <div id="lockhint" class="hidden">Clique pour viser à la souris · ZQSD bouger · clic gauche frapper · clic droit pouvoir · Espace sauter · Maj esquive</div>
