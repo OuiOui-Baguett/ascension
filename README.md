@@ -4,7 +4,16 @@ Jeu de baston en 3D à la première personne, sur une île déserte, de 2 à 8 j
 Three.js + Vite + TypeScript, serveur Node (WebSocket). Remplace Le Casse (et Ascension) : les anciennes versions
 restent dans l'historique Git.
 
-**État actuel : étape 1 — l'arène.** L'île (plage, dune, colline, cabane au toit praticable, caisses, rochers,
+**État actuel : étape 1 bis — l'arène améliorée.** Île agrandie d'un tiers (murets en ruine, caisses, rochers et
+palmiers en plus), colline retexturée (herbe au sommet, roche sur les flancs), modes de jeu **Chacun pour soi**,
+**Duos** (les potes ensemble, pas de coups entre coéquipiers) et **Potes contre bots**, flèche verte au-dessus des
+coéquipiers, caméra qui suit son coéquipier quand on est à l'eau. Téléphone : boutons en arc autour du pouce
+(Saut à gauche de Frapper), Frapper en continu en restant appuyé, caméra lissée avec accélération et sensibilité
+réglable, visée assistée pour l'orbe, résolution adaptative (plus de rendu pixelisé), décor fusionné pour la fluidité.
+Retours de coups : marqueur sur le viseur, % qui s'envolent, flèches vers les adversaires hors de l'écran, indicateur
+de la direction d'où vient le coup.
+
+**Étape 1 — l'arène.** L'île (plage, dune, colline, cabane au toit praticable, caisses, rochers,
 palmiers, feu de camp, ponton au-dessus de l'eau, épave au large), la mer cartoon avec écume sur le rivage,
 le déplacement à la première personne (course, saut, double saut, esquive), deux attaques communes en attendant
 les 6 personnages (coup de poing en combo de 3, orbe d'énergie qui explose), la jauge de dégâts en % (plus elle est

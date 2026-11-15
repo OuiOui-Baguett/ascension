@@ -21,30 +21,37 @@
       <button id="train" class="btn big yellow">S'entraîner contre des bots</button>
       <button id="create" class="btn big">Créer une partie entre potes</button>
       <div class="join"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="join" class="btn">Rejoindre</button></div>
+      <div class="row opts"><button id="sens" class="link">Caméra : normale</button><button id="snd" class="link">Son : oui</button></div>
       <div class="rules">
         <p><b>Le but :</b> éjecter les autres dans l'eau.</p>
         <p>Chaque coup reçu fait monter ta jauge <em>%</em>. Plus elle est haute, plus tu voles loin.</p>
         <p><b>3 vies</b> chacun, le dernier sur l'île gagne.</p>
       </div>
-      <button id="snd" class="link">Son : oui</button>
     </div>
   </div>
 
   <div id="lobby" class="screen hidden">
     <div class="card menu wide">
+      <div class="col">
       <div class="codebox"><span>Code de la partie</span><b id="l-code">····</b><small>Envoie-le à tes potes</small></div>
       <ul id="l-players"></ul>
+      </div><div class="col">
+      <div class="seg" id="l-mode"><button data-mode="ffa">Chacun pour soi</button><button data-mode="duo">Duos</button><button data-mode="coop">Potes contre bots</button></div>
       <div class="row set"><span>Vies</span><div class="step"><button data-l="-1" class="btn sq">−</button><b id="l-lives">3</b><button data-l="1" class="btn sq">+</button></div></div>
       <div class="row"><button id="addbot" class="btn">+ Bot</button><button id="rmbot" class="btn">− Bot</button><button id="leave" class="btn ghost">Quitter</button></div>
       <button id="start" class="btn big yellow">Lancer la baston</button>
       <p id="l-note" class="note"></p>
+      </div>
     </div>
   </div>
 
   <div id="hud" class="hidden">
     <div id="cards"></div>
     <div id="feed"></div>
-    <div id="cross"><i></i></div>
+    <div id="arrows"></div>
+    <div id="pops"></div>
+    <div id="hitdir"><i></i></div>
+    <div id="cross"><i></i><b></b></div>
     <div id="center"><b></b><span></span></div>
     <div id="mypct"><b>0 %</b><span></span></div>
     <div id="hurt"></div>

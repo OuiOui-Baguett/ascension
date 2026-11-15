@@ -22,6 +22,7 @@ export class Fighter {
   root = new THREE.Group(); private body = new THREE.Group();
   private handL: THREE.Mesh; private handR: THREE.Mesh; private feet: THREE.Mesh[] = [];
   private label: THREE.Sprite; private shield: THREE.Mesh; private lastLabel = '';
+  private ally: THREE.Sprite | null = null;
   private walk = 0; private punchT = 0; private punchSide = 1; private blastT = 0; private tumble = 0;
   constructor(scene: THREE.Scene, public name: string, color: number) {
     const c = colorOf(color), mat = toon(c), belly = toon(c.clone().lerp(new THREE.Color('#fff4dc'), .55)), dark = toon('#1b1530');
@@ -48,6 +49,17 @@ export class Fighter {
   setLabel(pct: number) {
     const k = `${this.name}|${pct}`; if (k === this.lastLabel) return; this.lastLabel = k;
     this.label.material.map?.dispose(); this.label.material.map = tag(this.name, `${pct} %`, pctColor(pct)); this.label.material.needsUpdate = true;
+  }
+  /** Coéquipier : flèche verte au-dessus de la tête, visible à travers le décor. */
+  setAlly(on: boolean) {
+    if (on && !this.ally) {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const x = c.getContext('2d')!; x.beginPath(); x.moveTo(8, 14); x.lineTo(56, 14); x.lineTo(32, 50); x.closePath();
+      x.fillStyle = '#5dff7a'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#1b1530'; x.stroke();
+      this.ally = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+      this.ally.scale.set(.42, .42, 1); this.ally.position.y = 2.75; this.ally.renderOrder = 10; this.root.add(this.ally);
+    }
+    if (this.ally) this.ally.visible = on;
   }
   attack(k: 'punch' | 'blast') { if (k === 'punch') { this.punchT = .22; this.punchSide *= -1; } else this.blastT = .35; }
   update(dt: number, speed: number, ground: boolean, stun: boolean, shield: boolean, visible: boolean) {

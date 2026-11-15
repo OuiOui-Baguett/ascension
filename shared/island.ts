@@ -6,14 +6,17 @@
 /** Sous cette hauteur des pieds, on est dans l'eau profonde : éjecté. */
 export const DROWN_Y = -0.9;
 
-/** Rayon du rivage selon l'angle (côte découpée). */
+/** Taille de l'île (1 = première version ; agrandie d'un tiers). */
+export const ISLE = 1.35;
+/** Rayon du rivage selon l'angle (côte découpée). La mer à l'écran utilise la même formule. */
 export function shoreR(a: number) {
-  return 15.5 + 2.0 * Math.sin(3 * a + 1.2) + 1.1 * Math.sin(5 * a + 0.4) + 0.6 * Math.sin(9 * a + 2);
+  return ISLE * (15.5 + 2.0 * Math.sin(3 * a + 1.2) + 1.1 * Math.sin(5 * a + 0.4) + 0.6 * Math.sin(9 * a + 2));
 }
+const S = ISLE;
 const ss = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 /** La colline rocheuse (point haut de l'île). */
-export const HILL = { x: 6, z: -5.5, h: 2.7 };
+export const HILL = { x: 6 * S, z: -5.5 * S, h: 2.9 };
 
 /** Hauteur du sol (sable, dune, colline ; sous l'eau au-delà du rivage). */
 export function terrainH(x: number, z: number) {
@@ -23,7 +26,7 @@ export function terrainH(x: number, z: number) {
   else if (d < 1) h = 0.55 - (d - 0.8) / 0.2 * 0.75;            // la plage descend jusqu'à l'eau
   else h = Math.max(-6, -0.2 - (r - R) * 0.95);                // puis ça plonge vite
   h += 0.35 * ss(0.62, 0.2, d) * (1 + 0.4 * Math.sin(x * .7) * Math.cos(z * .6));   // dune herbeuse au centre
-  h += HILL.h * ss(5.2, 1.8, Math.hypot(x - HILL.x, z - HILL.z));                 // colline
+  h += HILL.h * ss(6, 2, Math.hypot(x - HILL.x, z - HILL.z));                     // colline
   return h;
 }
 
@@ -42,20 +45,24 @@ const box = (cx: number, cz: number, w: number, d: number, h: number, tag: strin
   return { k: 'b', x0, z0, x1, z1, base: g - 1, top: top ?? gm + h, tag };
 };
 
-export const PALMS: [number, number, number][] = [[-9.5, -2.5, .2], [3.5, 8.5, 2.1], [-2.5, -11, 4.1], [11.5, 3.5, 1.2], [-11.2, 6.8, 5.3], [9.8, -11, 3.3]];
+export const PALMS: [number, number, number][] = ([[-9.5, -2.5, .2], [3.5, 8.5, 2.1], [-2.5, -11, 4.1], [11.5, 3.5, 1.2], [-11.2, 6.8, 5.3], [9.8, -11, 3.3], [-6, -12.6, .9], [13.2, -3.6, 2.6], [-1, 13.3, 4.6]] as [number, number, number][]).map(([x, z, k]) => [x * S, z * S, k]);
 const PIER_A = -Math.PI / 2;
 const pierR = shoreR(PIER_A);
 export const PIER = { a: PIER_A, r0: pierR - 2.5, r1: pierR + 7, w: 2.2, top: 0.8 };
 
 export const SOLIDS: Solid[] = [
   // la cabane (toit plat praticable) et ses caisses pour y grimper
-  box(-6, 4.2, 3.4, 3.0, 2.45, 'cabane'),
-  box(-3.75, 5.3, 1, 1, .95, 'caisse'),
-  box(-3.75, 6.35, 1, 1, 1.75, 'caisse2'),
-  box(-6.6, 1.95, 1, 1, .95, 'caisse'),
+  box(-6 * S, 4.2 * S, 3.4, 3.0, 2.45, 'cabane'),
+  box(-6 * S + 2.25, 4.2 * S + 1.1, 1, 1, .95, 'caisse'),
+  box(-6 * S + 2.25, 4.2 * S + 2.15, 1, 1, 1.75, 'caisse2'),
+  box(-6 * S - .6, 4.2 * S - 2.25, 1, 1, .95, 'caisse'),
+  // caisses près du ponton
+  box(1.8, -12.6 * S + 1.4, 1, 1, .95, 'caisse'), box(2.85, -12.6 * S + 1.2, 1, 1, .95, 'caisse'),
+  // murets en ruine pour se cacher
+  box(9.5 * S, 1.8 * S, .7, 3.2, 1.25, 'muret'), box(-4 * S, -7.6 * S, 3.4, .7, 1.25, 'muret'), box(-12.3 * S, -2.6 * S, .7, 2.6, 1.05, 'muret'),
   // rochers
-  cyl(8.2, 6.4, 1.5, 1.15, 'rocher'), cyl(-9.4, -7, 1.25, .95, 'rocher'), cyl(1.6, 11.2, 1, .75, 'rocher'),
-  cyl(-12.4, 1.2, 1.05, .85, 'rocher'), cyl(4.2, -1.8, .8, .6, 'rocher'),
+  cyl(8.2 * S, 6.4 * S, 1.5, 1.15, 'rocher'), cyl(-9.4 * S, -7 * S, 1.25, .95, 'rocher'), cyl(1.6 * S, 11.2 * S, 1, .75, 'rocher'),
+  cyl(-12.4 * S, 1.2 * S, 1.05, .85, 'rocher'), cyl(4.2 * S, -1.8 * S, .8, .6, 'rocher'), cyl(-5 * S, 10.6 * S, 1.3, 1, 'rocher'), cyl(12.6 * S, -7.8 * S, 1.1, .8, 'rocher'),
   // feu de camp au centre
   cyl(-1.2, 1.4, .75, .35, 'feu'),
   // palmiers
@@ -72,9 +79,9 @@ export const SOLIDS: Solid[] = [
 /** Points d'apparition (cercle autour du centre), décalés s'ils tombent dans un obstacle. */
 export const SPAWNS = Array.from({ length: 8 }, (_, i) => {
   for (let k = 0; k < 40; k++) {
-    const a = i / 8 * Math.PI * 2 + .3 + k * .05 * (k % 2 ? 1 : -1), r = 7.5 - (k % 5) * .4, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const a = i / 8 * Math.PI * 2 + .3 + k * .05 * (k % 2 ? 1 : -1), r = 7.5 * S - (k % 5) * .4, x = Math.cos(a) * r, z = Math.sin(a) * r;
     const free = SOLIDS.every(s => s.k === 'c' ? Math.hypot(x - s.x, z - s.z) > s.r + 1.2 : x < s.x0 - 1.2 || x > s.x1 + 1.2 || z < s.z0 - 1.2 || z > s.z1 + 1.2);
-    if (free && Math.hypot(x - HILL.x, z - HILL.z) > 4) return { x, z };
+    if (free && Math.hypot(x - HILL.x, z - HILL.z) > 4.5) return { x, z };
   }
   return { x: 0, z: 0 };
 });

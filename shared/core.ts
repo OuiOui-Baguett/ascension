@@ -4,14 +4,14 @@
 // Chaque joueur fait sa propre physique ; le serveur décide des touches et des vies.
 // ============================================================
 import type { ClientMsg, ServerMsg, PlayerInfo, Settings, SnapRow } from './protocol';
-import { MAX_PLAYERS, TICK_MS } from './protocol';
+import { MAX_PLAYERS, TICK_MS, teamsFor } from './protocol';
 import { SPAWNS, shoreR, segBlocked, terrainH, DROWN_Y } from './island';
 import { MOVE, PUNCH, BLAST, RESPAWN_MS, SHIELD_MS, newBody, stepBody, knock, stunFor, type Body } from './fight';
 
 export interface Conn { send(m: ServerMsg): void }
 interface Bot { body: Body; think: number; strafe: number; jumpAt: number; blastAt: number; err: number }
 interface Player {
-  id: string; token: string; name: string; conn: Conn | null; bot: Bot | null; color: number; room: Room | null; goneAt: number;
+  id: string; token: string; name: string; conn: Conn | null; bot: Bot | null; color: number; team: number; room: Room | null; goneAt: number;
   x: number; y: number; z: number; yaw: number; pitch: number; st: number; vx: number; vz: number; t: number;
   pct: number; lives: number; alive: boolean; out: boolean; respawnAt: number; shield: number;
   lastBy: string | null; lastAt: number; cdPunch: number; cdBlast: number; combo: number; comboAt: number;
@@ -62,7 +62,7 @@ export class Core {
   }
   private mk(name: string, bot: Bot | null): Player {
     return {
-      id: rid(), token: rid() + rid(), name, conn: null, bot, color: 0, room: null, goneAt: 0,
+      id: rid(), token: rid() + rid(), name, conn: null, bot, color: 0, team: 0, room: null, goneAt: 0,
       x: 0, y: 1, z: 0, yaw: 0, pitch: 0, st: 0, vx: 0, vz: 0, t: 0, pct: 0, lives: 3, alive: true, out: false, respawnAt: 0, shield: 0,
       lastBy: null, lastAt: 0, cdPunch: 0, cdBlast: 0, combo: 0, comboAt: 0,
     };
@@ -76,7 +76,7 @@ export class Core {
         this.leave(me);
         let code = '';
         do code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join(''); while (this.rooms.has(code));
-        const room: Room = { code, players: [], phase: 'lobby', settings: { lives: 3 }, projs: [], pid: 0, startAt: 0, out: [] };
+        const room: Room = { code, players: [], phase: 'lobby', settings: { lives: 3, mode: 'ffa' }, projs: [], pid: 0, startAt: 0, out: [] };
         this.rooms.set(code, room); this.addTo(room, me); return;
       }
       case 'join': {
@@ -97,7 +97,11 @@ export class Core {
         if (m.add) { if (r.players.length < MAX_PLAYERS) this.addTo(r, this.mk(BOT_NAMES.find(n => !r.players.some(p => p.name === n)) ?? 'Bot', { body: newBody(0, 1, 0), think: 0, strafe: 1, jumpAt: 0, blastAt: 0, err: 0 })); }
         else { const b = [...r.players].reverse().find(p => p.bot); if (b) { r.players.splice(r.players.indexOf(b), 1); this.lobby(r); } }
         return;
-      case 'settings': if (host && r.phase === 'lobby') { r.settings.lives = Math.max(1, Math.min(5, Math.round(m.lives) || 3)); this.lobby(r); } return;
+      case 'settings':
+        if (!host || r.phase !== 'lobby') return;
+        if (m.lives !== undefined) r.settings.lives = Math.max(1, Math.min(5, Math.round(m.lives) || 3));
+        if (m.mode === 'ffa' || m.mode === 'duo' || m.mode === 'coop') r.settings.mode = m.mode;
+        this.lobby(r); return;
       case 'start': if (host && r.phase === 'lobby') this.start(r); return;
       case 'in':
         if (r.phase !== 'play' || !me.alive || me.out) return;
@@ -124,8 +128,8 @@ export class Core {
     this.lobby(r);
   }
   private infos(r: Room): PlayerInfo[] {
-    const host = r.players.find(p => !p.bot);
-    return r.players.map(p => ({ id: p.id, name: p.name, color: p.color, bot: !!p.bot, host: p === host }));
+    const host = r.players.find(p => !p.bot), teams = r.phase === 'play' ? r.players.map(p => p.team) : teamsFor(r.players, r.settings.mode);
+    return r.players.map((p, i) => ({ id: p.id, name: p.name, color: p.color, bot: !!p.bot, host: p === host, team: teams[i] }));
   }
   private lobby(r: Room) { this.all(r, { t: 'lobby', code: r.code, players: this.infos(r), settings: r.settings, phase: r.phase }); }
   private stats(r: Room) { this.all(r, { t: 'stats', s: r.players.map(p => [p.id, Math.round(p.pct), p.lives]) }); }
@@ -136,10 +140,14 @@ export class Core {
   private start(r: Room) {
     if (r.players.length < 2) return this.err(r.players.find(p => !p.bot)!, 'Il faut au moins 2 combattants : ajoute un bot ou invite un pote.');
     const now = Date.now();
+    const teams = teamsFor(r.players, r.settings.mode);
+    if (new Set(teams).size < 2) return this.err(r.players.find(p => !p.bot)!, r.settings.mode === 'coop' ? 'En « potes contre bots », ajoute au moins un bot.' : 'Il faut au moins 2 équipes.');
+    r.players.forEach((p, i) => { p.team = teams[i]; });
     r.phase = 'play'; r.projs = []; r.out = []; r.startAt = now + 3500;
-    const order = [...SPAWNS].sort(() => Math.random() - .5);
-    r.players.forEach((p, i) => {
-      const s = order[i % order.length];
+    // les coéquipiers apparaissent côte à côte
+    const order = [...SPAWNS].sort(() => Math.random() - .5), byTeam = [...r.players].sort((a, b) => a.team - b.team);
+    r.players.forEach(p => {
+      const s = order[byTeam.indexOf(p) % order.length];
       p.x = s.x; p.z = s.z; p.y = terrainH(s.x, s.z) + .05; p.yaw = Math.atan2(s.x, s.z); p.pitch = 0; p.t = 0;
       p.pct = 0; p.lives = r.settings.lives; p.alive = true; p.out = false; p.shield = 0; p.lastBy = null; p.cdPunch = 0; p.cdBlast = 0;
       if (p.bot) { p.bot.body = newBody(p.x, p.y, p.z); p.bot.blastAt = now + 4000 + Math.random() * 3000; }
@@ -162,7 +170,7 @@ export class Core {
       const big = me.combo % 3 === 0;
       this.all(r, { t: 'atk', id: me.id, k, n: me.combo });
       for (const t of r.players) {
-        if (t === me || !t.alive || t.out || now < t.shield) continue;
+        if (t === me || t.team === me.team || !t.alive || t.out || now < t.shield) continue;
         const dx = t.x - ex, dy = (t.y + .95) - ey, dz = t.z - ez, d = Math.hypot(dx, dy, dz);
         if (d > PUNCH.range + MOVE.radius) continue;
         if ((dx * f.x + dy * f.y + dz * f.z) / Math.max(d, .01) < PUNCH.cos && d > .9) continue;
@@ -201,11 +209,12 @@ export class Core {
   }
   private checkEnd(r: Room) {
     const left = r.players.filter(p => !p.out);
-    if (left.length > 1) return;
+    if (new Set(left.map(p => p.team)).size > 1) return;
+    const winners = left.length ? r.players.filter(p => p.team === left[0].team).map(p => p.id) : [];
     const winner = left[0]?.id ?? null;
-    const ranking = [...(winner ? [winner] : []), ...[...r.out].reverse()].filter(id => r.players.some(p => p.id === id));
+    const ranking = [...winners, ...[...r.out].reverse().filter(id => !winners.includes(id))].filter(id => r.players.some(p => p.id === id));
     r.phase = 'lobby'; r.projs = [];
-    this.all(r, { t: 'end', winner, ranking });
+    this.all(r, { t: 'end', winner, winners, ranking });
     this.lobby(r);
   }
   private respawn(r: Room, p: Player, now: number) {
@@ -226,7 +235,7 @@ export class Core {
   private brain(r: Room, p: Player, now: number, dt: number) {
     const B = p.bot!, b = B.body;
     let tgt: Player | null = null, td = 1e9;
-    for (const q of r.players) if (q !== p && q.alive && !q.out) { const d = Math.hypot(q.x - b.x, q.z - b.z); if (d < td) { td = d; tgt = q; } }
+    for (const q of r.players) if (q !== p && q.team !== p.team && q.alive && !q.out) { const d = Math.hypot(q.x - b.x, q.z - b.z); if (d < td) { td = d; tgt = q; } }
     let mx = 0, mz = 0, jump = false, dash = false;
     const go = now >= r.startAt;
     if (tgt && go) {
@@ -263,12 +272,13 @@ export class Core {
   private stepProjs(r: Room, now: number, dt: number) {
     for (const p of [...r.projs]) {
       let boom = now > p.until, hitT: Player | null = null;
+      const ownerTeam = r.players.find(q => q.id === p.owner)?.team ?? -1;
       const n = 4, step = BLAST.speed * dt / n;
       for (let i = 0; i < n && !boom; i++) {
         p.x += p.dx * step; p.y += p.dy * step; p.z += p.dz * step;
         if (p.y < Math.max(0, terrainH(p.x, p.z)) || segBlocked(p.x, p.y, p.z, p.x, p.y + .01, p.z)) { boom = true; break; }
         for (const t of r.players) {
-          if (t.id === p.owner || !t.alive || t.out) continue;
+          if (t.id === p.owner || t.team === ownerTeam || !t.alive || t.out) continue;
           const cy = Math.max(t.y + .3, Math.min(t.y + 1.45, p.y));
           if (Math.hypot(p.x - t.x, p.y - cy, p.z - t.z) < BLAST.radius + MOVE.radius) { boom = true; hitT = t; break; }
         }
@@ -279,7 +289,7 @@ export class Core {
       const owner = r.players.find(q => q.id === p.owner);
       if (!owner) continue;
       for (const t of r.players) {
-        if (t === owner || !t.alive || t.out || now < t.shield) continue;
+        if (t === owner || t.team === owner.team || !t.alive || t.out || now < t.shield) continue;
         const d = t === hitT ? 0 : Math.hypot(t.x - p.x, (t.y + .9) - p.y, t.z - p.z);
         if (d > BLAST.splash) continue;
         const f = t === hitT ? 1 : 1 - d / BLAST.splash * .6;

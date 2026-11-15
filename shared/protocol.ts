@@ -2,8 +2,17 @@
 export const MAX_PLAYERS = 8;
 export const TICK_MS = 33;
 
-export interface Settings { lives: number }
-export interface PlayerInfo { id: string; name: string; color: number; bot: boolean; host: boolean }
+/** ffa : chacun pour soi · duo : équipes de 2 · coop : tous les humains contre les bots */
+export type Mode = 'ffa' | 'duo' | 'coop';
+export interface Settings { lives: number; mode: Mode }
+export interface PlayerInfo { id: string; name: string; color: number; bot: boolean; host: boolean; team: number }
+/** Répartition des équipes : les humains d'abord, pour que les potes jouent ensemble. */
+export function teamsFor(players: { bot: unknown }[], mode: Mode): number[] {
+  if (mode === 'ffa') return players.map((_, i) => i);
+  if (mode === 'coop') return players.map(p => p.bot ? 1 : 0);
+  const order = players.map((p, i) => ({ p, i })).sort((a, b) => (a.p.bot ? 1 : 0) - (b.p.bot ? 1 : 0) || a.i - b.i);
+  const t: number[] = []; order.forEach(({ i }, k) => { t[i] = Math.floor(k / 2); }); return t;
+}
 
 export type ClientMsg =
   | { t: 'hello'; token?: string; name: string }
@@ -12,7 +21,7 @@ export type ClientMsg =
   | { t: 'join'; code: string }
   | { t: 'leave' }
   | { t: 'bot'; add: boolean }
-  | { t: 'settings'; lives: number }
+  | { t: 'settings'; lives?: number; mode?: Mode }
   | { t: 'start' }
   /** position de son propre corps (la page fait sa physique) */
   | { t: 'in'; x: number; y: number; z: number; yaw: number; pitch: number; st: number }
@@ -36,6 +45,6 @@ export type ServerMsg =
   | { t: 'hit'; id: string; by: string; k: 'punch' | 'blast'; pct: number; ix: number; iy: number; iz: number; stun: number; x: number; y: number; z: number; big: boolean }
   | { t: 'ko'; id: string; by: string | null; lives: number; x: number; z: number }
   | { t: 'spawn'; id: string; x: number; y: number; z: number; yaw: number }
-  | { t: 'end'; winner: string | null; ranking: string[] }
+  | { t: 'end'; winner: string | null; winners: string[]; ranking: string[] }
   | { t: 'error'; msg: string }
   | { t: 'pong'; c: number };

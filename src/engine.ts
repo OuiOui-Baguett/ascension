@@ -1,51 +1,58 @@
 // ============================================================
 // Rendu : WebGL + post-process (halo lumineux pour les sorts, anticrénelage, vignette).
-// Trois niveaux de qualité ; le niveau baisse tout seul si le téléphone rame.
+// Résolution adaptative : on vise 60 images/s en ajustant finement la résolution,
+// sans jamais descendre sous un plancher net (avant : on tombait à une image pixelisée).
 // ============================================================
 import * as THREE from 'three';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset, ToneMappingEffect, ToneMappingMode, VignetteEffect, HueSaturationEffect } from 'postprocessing';
 
 export type Quality = 'high' | 'medium' | 'low';
-const touch = matchMedia('(pointer: coarse)').matches;
+export const TOUCH = matchMedia('(pointer: coarse)').matches;
 const qp = new URLSearchParams(location.search).get('quality');
 
 export class Engine {
   renderer: THREE.WebGLRenderer; composer!: EffectComposer; quality: Quality;
-  private locked = !!qp; private slow = 0; private fast = 0;
+  ratio: number; private maxRatio: number; private minRatio: number;
+  private acc = 0; private frames = 0; private warm = 0; private good = 0;
+  onShadows: (on: boolean) => void = () => {};
   constructor(canvas: HTMLCanvasElement, public scene: THREE.Scene, public camera: THREE.PerspectiveCamera) {
-    this.quality = qp === 'low' || qp === 'medium' || qp === 'high' ? qp : touch ? 'medium' : 'high';
+    this.quality = qp === 'low' || qp === 'medium' || qp === 'high' ? qp : TOUCH ? 'medium' : 'high';
+    const dpr = devicePixelRatio || 1;
+    this.maxRatio = Math.min(dpr, this.quality === 'low' ? 1.5 : 2);
+    this.minRatio = Math.min(this.maxRatio, TOUCH ? 1.3 : 1);
+    this.ratio = this.maxRatio;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = this.quality !== 'low';
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.build();
-    addEventListener('resize', () => this.resize());
-  }
-  private build() {
-    this.composer?.dispose();
-    const q = this.quality;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, q === 'high' ? 2 : q === 'medium' ? 1.5 : 1));
+    this.renderer.setPixelRatio(this.ratio);
     this.composer = new EffectComposer(this.renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.composer.addPass(new RenderPass(scene, camera));
     // seul ce qui dépasse 1 (sorts, flammes, éclats) s'illumine : le décor reste net et coloré
-    const bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: .95, luminanceSmoothing: .25, intensity: q === 'low' ? 1.1 : 1.6, radius: .7 });
-    const fx: any[] = [bloom, new HueSaturationEffect({ saturation: .12 }), new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL }), new VignetteEffect({ darkness: .38, offset: .3 })];
-    if (q !== 'low') fx.push(new SMAAEffect({ preset: q === 'high' ? SMAAPreset.HIGH : SMAAPreset.MEDIUM }));
-    this.composer.addPass(new EffectPass(this.camera, ...fx));
+    const bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: .95, luminanceSmoothing: .25, intensity: 1.6, radius: .7, resolutionScale: TOUCH ? .5 : 1 } as any);
+    this.composer.addPass(new EffectPass(camera, bloom, new HueSaturationEffect({ saturation: .12 }), new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL }),
+      new VignetteEffect({ darkness: .38, offset: .3 }), new SMAAEffect({ preset: TOUCH ? SMAAPreset.LOW : SMAAPreset.HIGH })));
     this.resize();
+    addEventListener('resize', () => this.resize());
   }
   resize() {
     const w = innerWidth, h = innerHeight;
+    this.renderer.setPixelRatio(this.ratio);
     this.renderer.setSize(w, h, false); this.composer.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
-  setQuality(q: Quality) { if (q !== this.quality) { this.quality = q; this.build(); } }
-  /** Surveille la fluidité : baisse la qualité après quelques secondes de saccades. */
   render(dt: number) {
     this.composer.render(dt);
-    if (this.locked) return;
-    if (dt > 1 / 38) { this.slow += dt; this.fast = 0; } else { this.fast += dt; this.slow = Math.max(0, this.slow - dt * .5); }
-    if (this.slow > 3 && this.quality !== 'low') { this.slow = 0; this.setQuality(this.quality === 'high' ? 'medium' : 'low'); }
+    if (qp) return;
+    // mesure sur 1 seconde, après 3 s de chauffe (compilation des shaders)
+    this.warm += dt; if (this.warm < 3) return;
+    this.acc += dt; this.frames++;
+    if (this.acc < 1) return;
+    const fps = this.frames / this.acc; this.acc = 0; this.frames = 0;
+    if (fps < 50 && this.ratio > this.minRatio) { this.ratio = Math.max(this.minRatio, this.ratio - .15); this.good = 0; this.resize(); }
+    else if (fps < 40 && this.renderer.shadowMap.enabled) { this.renderer.shadowMap.enabled = false; this.onShadows(false); }
+    else if (fps > 58) { if (++this.good >= 4 && this.ratio < this.maxRatio) { this.ratio = Math.min(this.maxRatio, this.ratio + .1); this.good = 0; this.resize(); } }
+    else this.good = 0;
   }
 }

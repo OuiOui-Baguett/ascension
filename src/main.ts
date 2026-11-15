@@ -4,7 +4,7 @@
 import '@fontsource/lilita-one';
 import './style.css';
 import * as THREE from 'three';
-import { Engine } from './engine';
+import { Engine, TOUCH } from './engine';
 import { buildWorld } from './world';
 import { FX } from './fx';
 import { Fighter, Viewmodel, colorOf, COLORS, pctColor } from './avatars';
@@ -12,8 +12,8 @@ import { Input } from './input';
 import { Net, LOCAL } from './net';
 import { audioUnlock, sfx, setMuted, isMuted } from './audio';
 import { MOVE, PUNCH, BLAST, RESPAWN_MS, newBody, stepBody } from '../shared/fight';
-import { terrainH } from '../shared/island';
-import type { PlayerInfo, ServerMsg } from '../shared/protocol';
+import { terrainH, segBlocked } from '../shared/island';
+import type { PlayerInfo, ServerMsg, Mode } from '../shared/protocol';
 
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -30,6 +30,15 @@ const fx = new FX(scene);
 const input = new Input(canvas, $('#joy'), $('#joy i'));
 for (const [id, a] of [['#b-punch', 'punch'], ['#b-blast', 'blast'], ['#b-jump', 'jump'], ['#b-dash', 'dash']]) input.bindButton($(id), a);
 const net = new Net();
+engine.onShadows = () => { world.sun.castShadow = false; scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; }); };
+// sensibilité de la caméra (réglable sur l'écran d'accueil)
+const SENS = [['lente', .75], ['normale', 1], ['rapide', 1.35], ['très rapide', 1.75]] as const;
+let sensI = 1; try { sensI = Math.max(0, Math.min(3, +(localStorage.getItem('nfg.sens') ?? 1))); } catch { /* */ }
+let pendX = 0, pendY = 0;          // rotation de caméra en attente, lissée sur quelques images
+const TEAMC = ['#3a86ff', '#ff5a5f', '#7bd63a', '#ffd23f'];
+interface Pop { el: HTMLElement; x: number; y: number; z: number; t: number }
+const pops: Pop[] = [];
+let hitDirT = 0;
 
 // ---------- état ----------
 type Screen = 'title' | 'lobby' | 'play';
@@ -40,7 +49,7 @@ interface Other { info: PlayerInfo; f: Fighter | null; buf: { t: number; x: numb
 const others = new Map<string, Other>();
 const me = {
   body: newBody(0, 1, 0), yaw: 0, pitch: 0, alive: false, out: false, shield: 0, cdPunch: 0, cdBlast: 0, seq: 0, color: 0,
-  startAt: 0, sendT: 0, deadT: 0, deadX: 0, deadZ: 0, pct: 0, lives: 3, count: -1,
+  startAt: 0, sendT: 0, deadT: 0, deadX: 0, deadZ: 0, pct: 0, lives: 3, count: -1, team: -1,
 };
 let vm: Viewmodel | null = null;
 let shake = 0, hurt = 0, fov = 78;
@@ -78,6 +87,10 @@ $('#train').onclick = () => { begin(); training = 3; net.send({ t: 'create' }); 
 $('#create').onclick = () => { begin(); training = 0; net.send({ t: 'create' }); };
 $('#join').onclick = () => { begin(); const c = ($('#code') as HTMLInputElement).value.trim().toUpperCase(); if (c.length === 4) net.send({ t: 'join', code: c }); else toast('Le code fait 4 lettres.'); };
 $('#snd').onclick = () => { setMuted(!isMuted()); $('#snd').textContent = `Son : ${isMuted() ? 'non' : 'oui'}`; };
+const sensTxt = () => { $('#sens').textContent = `Caméra : ${SENS[sensI][0]}`; };
+sensTxt();
+$('#sens').onclick = () => { sensI = (sensI + 1) % SENS.length; sensTxt(); try { localStorage.setItem('nfg.sens', String(sensI)); } catch { /* */ } };
+document.querySelectorAll<HTMLElement>('[data-mode]').forEach(b => b.onclick = () => net.send({ t: 'settings', mode: b.dataset.mode as Mode }));
 $('#addbot').onclick = () => net.send({ t: 'bot', add: true });
 $('#rmbot').onclick = () => net.send({ t: 'bot', add: false });
 $('#leave').onclick = () => { net.send({ t: 'leave' }); lobby = null; show('title'); screen = 'title'; };
@@ -91,11 +104,15 @@ function renderLobby() {
   if (!lobby) return;
   const host = lobby.players.find(p => p.host)?.id === net.id;
   $('#l-code').textContent = LOCAL ? 'SOLO' : lobby.code;
-  $('#l-players').innerHTML = lobby.players.map(p => `<li style="--c:${COLORS[p.color % 8]}"><i></i>${esc(p.name)}${p.id === net.id ? ' <small>toi</small>' : p.bot ? ' <small>bot</small>' : p.host ? ' <small>hôte</small>' : ''}</li>`).join('');
+  const mode = lobby.settings.mode, teamName = (t: number) => mode === 'coop' ? (t ? 'Bots' : 'Potes') : `Éq. ${'ABCD'[t] ?? t + 1}`;
+  const list = mode === 'ffa' ? lobby.players : [...lobby.players].sort((a, b) => a.team - b.team);
+  $('#l-players').innerHTML = list.map(p => `<li style="--c:${COLORS[p.color % 8]};--t:${TEAMC[p.team % 4]}"><i></i>${esc(p.name)}${mode !== 'ffa' ? ` <em>${teamName(p.team)}</em>` : ''}${p.id === net.id ? ' <small>toi</small>' : p.bot ? ' <small>bot</small>' : p.host ? ' <small>hôte</small>' : ''}</li>`).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.disabled = !host; });
   $('#l-lives').textContent = String(lobby.settings.lives);
   for (const id of ['#addbot', '#rmbot', '#start']) ($(id) as HTMLButtonElement).disabled = !host;
   document.querySelectorAll<HTMLButtonElement>('[data-l]').forEach(b => b.disabled = !host);
-  $('#l-note').textContent = host ? (lobby.players.length < 2 ? 'Il faut au moins 2 combattants : invite un pote ou ajoute un bot.' : 'Tout le monde est là ? Lance la baston.') : 'En attente de l\'hôte…';
+  const tip = mode === 'duo' ? 'Duos : les potes sont mis ensemble, puis les bots par deux. Pas de coups entre coéquipiers.' : mode === 'coop' ? 'Tous les potes contre tous les bots. Ajoute des bots pour corser.' : '';
+  $('#l-note').textContent = host ? (lobby.players.length < 2 ? 'Il faut au moins 2 combattants : invite un pote ou ajoute un bot.' : tip || 'Tout le monde est là ? Lance la baston.') : 'En attente de l\'hôte…';
   ($('#again') as HTMLButtonElement).classList.toggle('hidden', !host);
 }
 
@@ -108,7 +125,8 @@ function setupMatch(m: Extract<ServerMsg, { t: 'start' }>) {
     others.set(p.id, o);
   }
   const mine = m.players.find(p => p.id === net.id);
-  me.color = mine?.color ?? 0;
+  me.color = mine?.color ?? 0; me.team = mine?.team ?? -1;
+  for (const o of others.values()) o.f?.setAlly(o.info.team === me.team);
   vm = new Viewmodel(camera, me.color);
   me.body = newBody(m.spawn.x, m.spawn.y, m.spawn.z); me.yaw = m.spawn.yaw; me.pitch = -.05;
   me.alive = true; me.out = false; me.shield = 0; me.cdPunch = me.cdBlast = 0; me.pct = 0; me.lives = m.lives;
@@ -117,6 +135,7 @@ function setupMatch(m: Extract<ServerMsg, { t: 'start' }>) {
   renderCards();
 }
 function endMatch() {
+  for (const p of pops) p.el.remove(); pops.length = 0;
   for (const o of others.values()) o.f?.dispose();
   others.clear();
   for (const p of projs.values()) p.orb.dispose();
@@ -127,9 +146,10 @@ function endMatch() {
   $('#center').classList.remove('on');
 }
 function renderCards() {
-  $('#cards').innerHTML = [...others.values()].map(o => {
+  const teamGame = [...others.values()].some(o => o.info.team === me.team && o.info.id !== net.id);
+  $('#cards').innerHTML = [...others.values()].sort((a, b) => a.info.team - b.info.team).map(o => {
     const out = o.lives <= 0;
-    return `<div class="pcard${o.info.id === net.id ? ' me' : ''}${out ? ' out' : ''}" style="--c:${COLORS[o.info.color % 8]}"><small>${esc(o.info.id === net.id ? 'Toi' : o.info.name)}</small><b style="color:${pctColor(o.pct)}">${out ? 'K.O.' : o.pct + '%'}</b><em>${'♥'.repeat(Math.max(0, o.lives))}</em></div>`;
+    return `<div class="pcard${o.info.id === net.id ? ' me' : ''}${out ? ' out' : ''}${teamGame && o.info.team === me.team ? ' ally' : ''}" style="--c:${COLORS[o.info.color % 8]}"><small>${esc(o.info.id === net.id ? 'Toi' : o.info.name)}</small><b style="color:${pctColor(o.pct)}">${out ? 'K.O.' : o.pct + '%'}</b><em>${'♥'.repeat(Math.max(0, o.lives))}</em></div>`;
   }).join('');
   const b = $('#mypct');
   (b.querySelector('b') as HTMLElement).textContent = me.out ? 'Éliminé' : `${me.pct} %`;
@@ -207,7 +227,15 @@ net.onMsg = m => {
     case 'hit': {
       if (m.k === 'punch') { fx.punch(m.x, m.y, m.z, m.big); sfx.punch(m.big, nearMe(m.x, m.z)); }
       const o = others.get(m.id); if (o) { o.pct = m.pct; o.f?.setLabel(m.pct); }
+      if (m.by === net.id && m.id !== net.id) {
+        const c = $('#cross'); c.classList.remove('hit', 'kill'); void c.offsetWidth; c.classList.add('hit');
+        const p = o?.buf[o.buf.length - 1];
+        const el = document.createElement('div'); el.textContent = m.big ? 'BOUM !' : `${m.pct}%`; if (m.big) el.className = 'big';
+        $('#pops').appendChild(el); pops.push({ el, x: p?.x ?? m.x, y: (p?.y ?? m.y) + 2.1, z: p?.z ?? m.z, t: 0 });
+      }
       if (m.id === net.id) {
+        const a = others.get(m.by)?.buf.at(-1);
+        if (a) { const rel = Math.atan2(-(a.x - me.body.x), -(a.z - me.body.z)) - me.yaw; ($('#hitdir i') as HTMLElement).style.transform = `rotate(${-rel}rad)`; hitDirT = 1; }
         const b = me.body;
         b.vx = m.ix; b.vz = m.iz; b.vy = Math.max(b.vy, m.iy); b.stun = m.stun; b.ground = false; b.dashT = 0;
         shake = Math.max(shake, m.big ? .9 : .4); hurt = m.big ? 1 : .6; sfx.hurt();
@@ -226,7 +254,7 @@ net.onMsg = m => {
         if (m.lives <= 0) { me.out = true; center('ÉLIMINÉ', 'Tu regardes la fin de la manche', 2500); }
         else center('PLOUF !', `Encore ${m.lives} vie${m.lives > 1 ? 's' : ''}… retour dans un instant`, 2200);
         sfx.ko();
-      } else if (m.by === net.id) { center('À L\'EAU !', `${nameOf(m.id)} est éjecté`, 1200); }
+      } else if (m.by === net.id) { center('À L\'EAU !', `${nameOf(m.id)} est éjecté`, 1200); const c = $('#cross'); c.classList.remove('hit', 'kill'); void c.offsetWidth; c.classList.add('kill'); }
       renderCards(); break;
     }
     case 'spawn': {
@@ -237,9 +265,9 @@ net.onMsg = m => {
       break;
     }
     case 'end': {
-      const won = m.winner === net.id;
+      const won = (m.winners ?? [m.winner]).includes(net.id), team = (m.winners ?? []).length > 1;
       if (won) sfx.win();
-      $('#e-title').textContent = m.winner ? (won ? 'Victoire !' : `${nameOf(m.winner)} gagne !`) : 'Match nul';
+      $('#e-title').textContent = !m.winner ? 'Match nul' : won ? (team ? 'Victoire de ton équipe !' : 'Victoire !') : team ? `L'équipe de ${nameOf(m.winner)} gagne !` : `${nameOf(m.winner)} gagne !`;
       $('#e-rank').innerHTML = m.ranking.map((id, i) => `<li style="--c:${colorHex(id)}"><i></i>${esc(id === net.id ? 'Toi' : nameOf(id))}<span>${['🥇', '🥈', '🥉'][i] ?? `${i + 1}e`}</span></li>`).join('');
       center(won ? 'VICTOIRE !' : 'FIN !', '', 1800);
       input.enabled = false; if (document.pointerLockElement) document.exitPointerLock();
@@ -273,9 +301,12 @@ function frame() {
 }
 
 function play(dt: number, now: number) {
-  const sens = input.touch ? .0042 : .0022;
-  me.yaw -= input.lookX * sens; me.pitch = Math.max(-1.45, Math.min(1.45, me.pitch - input.lookY * sens));
-  input.lookX = input.lookY = 0;
+  // caméra : on étale chaque mouvement sur ~40 ms (supprime les à-coups du tactile) sans rien perdre
+  const sens = (input.touch ? .0036 : .0022) * SENS[sensI][1];
+  pendX += input.lookX * sens; pendY += input.lookY * sens; input.lookX = input.lookY = 0;
+  const k = input.touch ? 1 - Math.exp(-dt * 26) : 1;
+  me.yaw -= pendX * k; me.pitch = Math.max(-1.45, Math.min(1.45, me.pitch - pendY * k));
+  pendX *= 1 - k; pendY *= 1 - k;
   const started = now >= me.startAt;
   // compte à rebours
   const left = Math.ceil((me.startAt - now) / 1000);
@@ -298,15 +329,17 @@ function play(dt: number, now: number) {
     if (fell) { net.send({ t: 'fell' }); me.alive = false; me.deadT = now; me.deadX = b.x; me.deadZ = b.z; }
     // les coups
     const ex = b.x, ey = b.y + MOVE.eye, ez = b.z;
-    if (input.take('punch') && started && now >= me.cdPunch) {
+    if ((input.take('punch') || input.held.has('punch')) && started && now >= me.cdPunch) {
       me.cdPunch = now + PUNCH.cd * 1000; vm?.punch(); sfx.swing();
       net.send({ t: 'atk', k: 'punch', x: b.x, y: b.y, z: b.z, yaw: me.yaw, pitch: me.pitch, s: ++me.seq });
     }
     if (input.take('blast') && started && now >= me.cdBlast) {
       me.cdBlast = now + BLAST.cd * 1000; vm?.blast(); sfx.cast();
-      const d = fwd(me.yaw, me.pitch), s = ++me.seq;
+      let ay = me.yaw, ap = me.pitch;
+      if (TOUCH) { const a = assist(ex, ey, ez); if (a) { ay = a.yaw; ap = a.pitch; } }
+      const d = fwd(ay, ap), s = ++me.seq;
       addProj(`m${s}`, ex + d.x * .7, ey - .15 + d.y * .7, ez + d.z * .7, d.x, d.y, d.z, colorOf(me.color));
-      net.send({ t: 'atk', k: 'blast', x: b.x, y: b.y, z: b.z, yaw: me.yaw, pitch: me.pitch, s });
+      net.send({ t: 'atk', k: 'blast', x: b.x, y: b.y, z: b.z, yaw: ay, pitch: ap, s });
     }
     if (now - me.sendT > 33) {
       me.sendT = now;
@@ -325,15 +358,24 @@ function play(dt: number, now: number) {
     // à l'eau : on regarde la gerbe depuis le ciel, puis l'île
     if (vm) vm.group.visible = false;
     const k = Math.min(1, (now - me.deadT) / 1500);
-    const cx = me.out ? Math.cos(t * .1) * 30 : me.deadX * (1 + k * .4), cz = me.out ? Math.sin(t * .1) * 30 : me.deadZ * (1 + k * .4);
-    camera.position.lerp(new THREE.Vector3(cx, 6 + k * 10, cz), Math.min(1, dt * 3));
-    camera.lookAt(me.out ? 0 : me.deadX * .5, 1, me.out ? 0 : me.deadZ * .5);
+    const mate = [...others.values()].find(o => o.f && o.info.team === me.team && o.buf.length && !(o.buf[o.buf.length - 1].st & 16));
+    if (mate && now - me.deadT > 1500) {
+      const p = mate.f!.root.position, yaw = mate.buf[mate.buf.length - 1].yaw;
+      camera.position.lerp(new THREE.Vector3(p.x + Math.sin(yaw) * 4.5, p.y + 2.6, p.z + Math.cos(yaw) * 4.5), Math.min(1, dt * 4));
+      camera.lookAt(p.x, p.y + 1.2, p.z);
+    } else {
+      const cx = me.out ? Math.cos(t * .1) * 38 : me.deadX * (1 + k * .4), cz = me.out ? Math.sin(t * .1) * 38 : me.deadZ * (1 + k * .4);
+      camera.position.lerp(new THREE.Vector3(cx, 6 + k * 10, cz), Math.min(1, dt * 3));
+      camera.lookAt(me.out ? 0 : me.deadX * .5, 1, me.out ? 0 : me.deadZ * .5);
+    }
     fov += (70 - fov) * Math.min(1, dt * 3);
     void RESPAWN_MS;
   }
   // tremblement, flash rouge
   if (shake > 0) { camera.rotation.x += (Math.random() - .5) * shake * .05; camera.rotation.y += (Math.random() - .5) * shake * .05; shake = Math.max(0, shake - dt * 2.2); }
   hurt = Math.max(0, hurt - dt * 2.5); $('#hurt').style.opacity = String(hurt * .8);
+  hitDirT = Math.max(0, hitDirT - dt * 1.4); ($('#hitdir i') as HTMLElement).style.opacity = String(hitDirT);
+  hud(dt);
   if (Math.abs(camera.fov - fov) > .05) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
   // les autres (affichés avec 100 ms de retard pour lisser)
@@ -370,10 +412,52 @@ function play(dt: number, now: number) {
   $('#cross').classList.toggle('ready', cdb <= 0);
 }
 
+/** Visée assistée (tactile) : si un adversaire est à moins de ~9° du viseur, l'orbe part vers lui. */
+function assist(ex: number, ey: number, ez: number) {
+  const f = fwd(me.yaw, me.pitch); let best: { yaw: number; pitch: number } | null = null, ba = .16;
+  for (const o of others.values()) {
+    const B = o.buf; if (!o.f || o.info.team === me.team || !B.length || B[B.length - 1].st & 16) continue;
+    const p = o.f.root.position, d = Math.hypot(p.x - ex, p.y + 1 - ey, p.z - ez);
+    if (d > 30 || d < 1) continue;
+    const last = B[B.length - 1], prev = B[Math.max(0, B.length - 4)], span = Math.max(.05, (last.t - prev.t) / 1000), lead = d / BLAST.speed;
+    const tx = p.x + (last.x - prev.x) / span * lead, ty = p.y + 1, tz = p.z + (last.z - prev.z) / span * lead;
+    const v = new THREE.Vector3(tx - ex, ty - ey, tz - ez).normalize(), a = Math.acos(Math.min(1, v.dot(f)));
+    if (a < ba && !segBlocked(ex, ey, ez, p.x, p.y + 1, p.z)) { ba = a; best = { yaw: Math.atan2(-v.x, -v.z), pitch: Math.asin(v.y) }; }
+  }
+  return best;
+}
+/** HUD qui suit le monde : chiffres de dégâts qui s'envolent, flèches vers les adversaires hors de l'écran. */
+const arrows: HTMLElement[] = [];
+const tmpV = new THREE.Vector3();
+function hud(dt: number) {
+  for (let i = pops.length - 1; i >= 0; i--) {
+    const p = pops[i]; p.t += dt; p.y += dt * 1.2;
+    tmpV.set(p.x, p.y, p.z).project(camera);
+    if (p.t > .9 || tmpV.z > 1) { p.el.remove(); pops.splice(i, 1); continue; }
+    p.el.style.transform = `translate(${(tmpV.x * .5 + .5) * innerWidth}px, ${(-tmpV.y * .5 + .5) * innerHeight}px) translate(-50%,-50%) scale(${1 + Math.max(0, .15 - p.t) * 3})`;
+    p.el.style.left = '0'; p.el.style.top = '0'; p.el.style.opacity = String(Math.min(1, (.9 - p.t) * 4));
+  }
+  let n = 0;
+  if (me.alive) for (const o of others.values()) {
+    const B = o.buf; if (!o.f || o.info.team === me.team || !B.length || B[B.length - 1].st & 16) continue;
+    const p = o.f.root.position;
+    tmpV.set(p.x, p.y + 1, p.z).project(camera);
+    if (tmpV.z < 1 && Math.abs(tmpV.x) < .92 && Math.abs(tmpV.y) < .92) continue;
+    const dx = p.x - me.body.x, dz = p.z - me.body.z;
+    const fwdC = -dx * Math.sin(me.yaw) - dz * Math.cos(me.yaw), rightC = dx * Math.cos(me.yaw) - dz * Math.sin(me.yaw), rel = Math.atan2(rightC, fwdC);
+    let el = arrows[n]; if (!el) { el = document.createElement('i'); $('#arrows').appendChild(el); arrows.push(el); }
+    const R = Math.min(innerWidth, innerHeight) * .36;
+    el.style.display = ''; el.style.setProperty('--c', COLORS[o.info.color % 8]);
+    el.style.transform = `translate(${Math.sin(rel) * R}px, ${-Math.cos(rel) * R}px) rotate(${rel}rad)`;
+    n++;
+  }
+  for (let i = n; i < arrows.length; i++) arrows[i].style.display = 'none';
+}
+
 // ---------- démarrage ----------
 requestAnimationFrame(() => { $('#loading').style.opacity = '0'; setTimeout(() => $('#loading').remove(), 500); });
 frame();
 if (params.has('train')) $('#train').click();
 
 // pour les tests automatiques
-(window as any).__game = { me, others, net, camera, get screen() { return screen; }, input };
+(window as any).__game = { me, others, net, camera, get screen() { return screen; }, input, engine };
